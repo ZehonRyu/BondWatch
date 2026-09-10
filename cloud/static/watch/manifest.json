@@ -1,0 +1,9 @@
+{
+  "name": "BondWatch",
+  "short_name": "BondWatch",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#05060a",
+  "theme_color": "#05060a",
+  "start_url": "/"
+}

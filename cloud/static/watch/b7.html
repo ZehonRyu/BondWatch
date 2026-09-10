@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BondWatch</title>
+<style>
+  body { margin:0; background:#111; color:#eee; font-family:"Noto Sans SC",sans-serif;
+    display:grid; grid-template-columns:1fr 280px; gap:20px; padding:20px; }
+  @media(max-width:800px){body{grid-template-columns:1fr}}
+  .screen { background:#000; border-radius:22px; touch-action:none; cursor:pointer; }
+  canvas { image-rendering:pixelated; display:block; border-radius:22px; }
+  .port { width:360px; height:480px; }
+  .port canvas { width:360px; height:480px; }
+  .land { width:480px; height:360px; }
+  .land canvas { width:480px; height:360px; }
+  .panel { background:#1c1c1e; border-radius:16px; padding:14px; font-size:14px; line-height:1.6; }
+  .hit { color:#64d2ff; font:12px monospace; min-height:1.6em; }
+  .log { height:140px; overflow:auto; background:#000; color:#63e6a0; font:11px monospace; padding:8px; border-radius:8px; }
+  button { background:#2c2c2e; color:#fff; border:0; border-radius:10px; padding:8px 12px; margin:4px 4px 0 0; cursor:pointer; }
+  b{color:#fff}
+</style>
+</head>
+<body>
+<div>
+  <h2 style="margin:0 0 8px">BondWatch</h2>
+  <p>表盘连手机/电脑。竖屏全身，横屏大脸。本机只有控制与设置。</p>
+  <div class="screen port" id="screen"><canvas id="c" width="240" height="320"></canvas></div>
+</div>
+<aside class="panel">
+  <div class="hit" id="hit">—</div>
+  <p><b>上滑</b>控制　<b>左滑</b>设置　<b>点按</b>应答　<b>下滑</b>返回</p>
+  <button type="button" id="btnOrient">切换横/竖屏</button>
+  <div class="log" id="log"></div>
+</aside>
+<script>
+(() => {
+  const cv=document.getElementById("c"), ctx=cv.getContext("2d");
+  const sc=document.getElementById("screen");
+  const HINT="上滑控制";
+  const S={page:"home", dnd:false, bright:1, vol:2, land:false, calStep:0, sub:HINT};
+  const VOL=["静音","低","中","高"], BR=["低","中","高"];
+  const W=()=>S.land?320:240, H=()=>S.land?240:320;
+  function log(m){ const el=document.getElementById("log"); el.textContent=`[${new Date().toLocaleTimeString()}] ${m}\n`+el.textContent.slice(0,800); }
+  function applyCanvas(){
+    cv.width=W(); cv.height=H();
+    sc.className="screen "+(S.land?"land":"port");
+  }
+  function fill(c){ ctx.fillStyle=c; ctx.fillRect(0,0,W(),H()); }
+  function rr(x,y,w,h,r,c){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); ctx.fillStyle=c; ctx.fill(); }
+  function circ(x,y,r,c){ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle=c; ctx.fill(); }
+  function T(s,x,y,sz,c){ ctx.font=`600 ${sz}px "Noto Sans SC",sans-serif`; ctx.fillStyle=c; ctx.fillText(s,x,y); }
+  function hitBand(v,top,rowH,n){ if(v<top) return -1; const r=Math.floor((v-top)/rowH); return (r<0||r>=n)?-1:r; }
+  function colW(){ return Math.floor((W()-16)/3); }
+  function hitCtrl(x,y){
+    if(S.land){ if(y<40||y>H()-8) return -1; return hitBand(x,8,colW(),3); }
+    return hitBand(y,56,80,3);
+  }
+  function hitSet(x,y){
+    if(S.land){ if(y<40||y>H()-8) return -1; return hitBand(x,8,colW(),3); }
+    return hitBand(y,56,80,3);
+  }
+  function grab(title){
+    rr(W()/2-18,8,36,4,2,"#555");
+    T(title,16,34,15,"#fff");
+  }
+  function drawHome(){
+    fill("#000");
+    T("08:00", S.land?12:58, S.land?38:48, S.land?28:36, "#fff");
+    if(S.dnd){
+      rr(S.land?12:94, S.land?48:56, 48,20,10,"#7810");
+      T("勿扰", S.land?20:102, S.land?63:70, 12,"#fff");
+    }
+    if(S.land){
+      circ(214,118,72,"#5E9D"); circ(158,70,18,"#5E9D"); circ(270,70,18,"#5E9D");
+      circ(192,104,8,"#fff"); circ(236,104,8,"#fff");
+      circ(186,128,6,"#f8a"); circ(242,128,6,"#f8a");
+    } else {
+      ctx.fillStyle="#1082"; ctx.beginPath(); ctx.ellipse(120,260,38,9,0,0,Math.PI*2); ctx.fill();
+      circ(120,214,28,"#5E9D");
+      circ(120,150,52,"#5E9D"); circ(82,122,15,"#5E9D"); circ(158,122,15,"#5E9D");
+      circ(104,144,8,"#fff"); circ(136,144,8,"#fff");
+      circ(98,160,5,"#f8a"); circ(142,160,5,"#f8a");
+    }
+    T(S.sub, S.land?12:(W()/2-28), H()-16, 13, "#888");
+  }
+  function paintCols(items, colors){
+    fill("#000"); grab(items.title);
+    const cw=colW(), ch=H()-52;
+    items.rows.forEach((t,i)=>{
+      const x=8+i*cw;
+      rr(x,40,cw-8,ch,20, colors[i]);
+      T(t[0],x+12,118,15,"#fff"); T(t[1],x+12,142,14,"#ccc");
+    });
+  }
+  function drawCtrl(){
+    const rows=[["勿扰",S.dnd?"开":"关"],["亮度",BR[S.bright]],["声音",VOL[S.vol]]];
+    const cols=[S.dnd?"#6113":"#2104","#3A00","#0320"];
+    if(S.land){ paintCols({title:"控制", rows}, cols); return; }
+    fill("#000"); grab("控制");
+    rows.forEach((t,i)=>{
+      const y=56+i*80; rr(10,y,220,68,20, cols[i]);
+      T(t[0],68,y+28,16,"#fff"); T(t[1],68,y+50,14,"#ccc");
+    });
+  }
+  function drawSet(){
+    const rows=[["语言","中文"],["屏幕",S.land?"横屏":"竖屏"],["触摸校准","开始"]];
+    if(S.land){ paintCols({title:"设置", rows}, ["#2104","#2104","#2104"]); return; }
+    fill("#000"); grab("设置");
+    rows.forEach((t,i)=>{
+      const y=56+i*80; rr(10,y,220,68,20,"#2104");
+      T(t[0],24,y+40,16,"#fff"); T(t[1],150,y+40,16,"#888");
+    });
+  }
+  function calBox(){
+    if(S.land) return {gx:12,gy:56,gw:84,gh:84,bx:W()-96,by:108,bw:84,bh:84,doneY:H()-42};
+    return {gx:12,gy:78,gw:110,gh:110,bx:118,by:178,bw:110,bh:110,doneY:248};
+  }
+  function target(cx,cy,r,c){ circ(cx,cy,r,c); circ(cx,cy,r-12,"#000"); circ(cx,cy,7,c); }
+  function drawCal(){
+    fill("#000"); rr(W()/2-18,8,36,4,2,"#555"); T("触摸校准",16,32,15,"#fff");
+    const b=calBox();
+    const t0={x:b.gx+b.gw/2,y:b.gy+b.gh/2}, t1={x:b.bx+b.bw/2,y:b.by+b.bh/2};
+    if(S.calStep===0){ T("点左上角准星",16,50,13,"#888"); target(t0.x,t0.y,b.gw/2-4,"#0f0"); }
+    else if(S.calStep===1){ T("点右下角准星",16,50,13,"#888"); target(t1.x,t1.y,b.bw/2-4,"#0af"); }
+    else { T("按住绿点确认",16,50,13,"#8C8"); target(t0.x,t0.y,b.gw/2-4,"#0f0"); rr(10,b.doneY,W()-20,36,18,"#0f0"); T("完成",W()/2-16,b.doneY+24,14,"#000"); }
+  }
+  function render(){
+    if(S.page==="control") drawCtrl(); else if(S.page==="settings") drawSet(); else if(S.page==="cal") drawCal(); else drawHome();
+    requestAnimationFrame(render);
+  }
+  let down=null;
+  function pos(e){ const r=cv.getBoundingClientRect(); const p=e.touches?e.touches[0]:e; return {x:(p.clientX-r.left)/r.width*W(), y:(p.clientY-r.top)/r.height*H()}; }
+  function setOrient(land){
+    S.land=land; applyCanvas();
+    log(land?"横屏 320×240":"竖屏 240×320");
+  }
+  function onDown(e){ e.preventDefault(); down={...pos(e)}; }
+  function onUp(e){
+    e.preventDefault(); if(!down) return;
+    const up=pos(e.changedTouches?e.changedTouches[0]:e); const dx=up.x-down.x, dy=up.y-down.y; down=null;
+    const adx=Math.abs(dx), ady=Math.abs(dy);
+    let t="tap";
+    if(adx>80||ady>80){ if(ady>=adx*1.5) t=dy<0?"up":"down"; else if(adx>=ady*1.5) t=dx<0?"left":"right"; }
+    document.getElementById("hit").textContent=`${Math.round(up.x)},${Math.round(up.y)} ${t} ${S.page} ${S.land?"L":"P"}`;
+    if(S.page==="home"){
+      if(t==="up"){ S.page="control"; log("控制"); }
+      else if(t==="left"){ S.page="settings"; log("设置"); }
+      else if(t==="tap"){ S.sub="点一下"; setTimeout(()=>{ if(S.page==="home") S.sub=HINT; },800); }
+      return;
+    }
+    if(t==="down"){ S.page=S.page==="cal"?"settings":"home"; log("返回"); return; }
+    if(t!=="tap") return;
+    if(S.page==="control"){
+      const i=hitCtrl(up.x,up.y);
+      if(i===0) S.dnd=!S.dnd; else if(i===1) S.bright=(S.bright+1)%3; else if(i===2) S.vol=(S.vol+1)%4;
+      return;
+    }
+    if(S.page==="settings"){
+      const i=hitSet(up.x,up.y);
+      if(i===1) setOrient(!S.land);
+      else if(i===2){ S.page="cal"; S.calStep=0; }
+      return;
+    }
+    if(S.page==="cal"){
+      const b=calBox();
+      if(S.calStep===0) S.calStep=1;
+      else if(S.calStep===1) S.calStep=2;
+      else if(up.y>=b.doneY) S.page="settings";
+    }
+  }
+  document.getElementById("btnOrient").onclick=()=>setOrient(!S.land);
+  sc.addEventListener("mousedown",onDown); window.addEventListener("mouseup",onUp);
+  sc.addEventListener("touchstart",onDown,{passive:false}); sc.addEventListener("touchend",onUp,{passive:false});
+  applyCanvas();
+  log("伴侣表盘 · 竖屏/横屏"); requestAnimationFrame(render);
+})();
+</script>
+</body>
+</html>

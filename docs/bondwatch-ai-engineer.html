@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>云端 AI 工程师交付说明</title>
+  <style>
+    :root {
+      --bg: #f3f2ee; --fg: #1c1c1c; --muted: #5c5c5c; --line: #d9d6ce;
+      --card: #ffffff; --pill: #eceae3; --accent: #1f6feb;
+      --warn: #9a6700; --warn-bg: #fff6db; --info: #1f4ead; --info-bg: #e8eefc;
+      --danger: #9b1c1c; --ok: #0f6b4c;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--fg);
+      font: 15px/1.5 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 64px; }
+    h1 { font-size: 28px; margin: 0 0 4px; font-weight: 650; }
+    h2 { font-size: 18px; margin: 28px 0 10px; }
+    h3 { font-size: 15px; margin: 22px 0 8px; }
+    .sub { color: var(--muted); margin: 0 0 18px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+    .pill { border: 1px solid var(--line); background: var(--pill); color: var(--fg);
+      padding: 5px 11px; border-radius: 999px; cursor: pointer; font-size: 13px; }
+    .pill.active { background: var(--fg); color: #fff; border-color: var(--fg); }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 0 0 16px; }
+    .stat { background: var(--card); border: 1px solid var(--line); padding: 12px 14px; }
+    .stat b { display: block; font-size: 22px; font-weight: 650; }
+    .stat span { color: var(--muted); font-size: 12px; }
+    .stat.warn b { color: var(--warn); }
+    .stat.info b { color: var(--info); }
+    .callout { border: 1px solid var(--line); background: var(--card); padding: 12px 14px; margin: 0 0 16px; }
+    .callout.warn { background: var(--warn-bg); border-color: #ead9a0; }
+    .callout.info { background: var(--info-bg); border-color: #c9d6f5; }
+    .callout strong { display: block; margin-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 13px; margin: 0 0 8px; }
+    th, td { border: 1px solid var(--line); padding: 8px 9px; text-align: left; vertical-align: top; }
+    th { background: #f7f6f2; font-weight: 600; position: sticky; top: 0; }
+    tr.stripe:nth-child(even) td { background: #fafaf7; }
+    tr.tone-danger td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+    tr.tone-warning td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+    tr.tone-info td:first-child { box-shadow: inset 3px 0 0 var(--info); }
+    tr.tone-success td:first-child { box-shadow: inset 3px 0 0 var(--ok); }
+    .gantt-head, .gantt-row { display: grid; grid-template-columns: 176px 1fr; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .gantt-axis { position: relative; height: 22px; }
+    .gantt-track { position: relative; height: 28px; border: 1px solid var(--line); background: var(--card); cursor: pointer; padding: 0; width: 100%; text-align: left; }
+    .tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
+    .today { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--accent); }
+    .bar { position: absolute; top: 5px; bottom: 5px; background: #cfd6e4; color: var(--fg); font-size: 11px; display: flex; align-items: center; padding: 0 6px; overflow: hidden; white-space: nowrap; }
+    .bar.critical { background: var(--accent); color: #fff; }
+    .bar.active { outline: 2px solid #111; }
+    .label { font-size: 13px; }
+    .label.active { font-weight: 650; }
+    .axis-label { position: absolute; font-size: 12px; color: var(--muted); }
+    .legend { color: var(--muted); font-size: 13px; display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0 12px; }
+    .hint { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+    .offline { color: var(--muted); font-size: 12px; margin-top: 36px; }
+    a { color: var(--accent); }
+    @media (max-width: 900px) { .stats { grid-template-columns: 1fr 1fr; } .gantt-head, .gantt-row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>云端 AI 工程师交付说明</h1>
+    <p class="sub">只覆盖云端这一人。手表和假手表只做眼睛和嘴巴。 返回 <a href="bondwatch-board.html">计划看板</a>。</p>
+    <nav class="row" id="tabs"></nav>
+    <main id="app"></main>
+    <p class="offline">静态页 · 不需要联网 · 双击用浏览器打开</p>
+  </div>
+  <script id="board-data" type="application/json">{
+  "views": [
+    {
+      "id": "scope",
+      "label": "职责边界"
+    },
+    {
+      "id": "build",
+      "label": "要实现什么"
+    },
+    {
+      "id": "metric",
+      "label": "指标怎么过"
+    },
+    {
+      "id": "nudge",
+      "label": "自主开口"
+    },
+    {
+      "id": "week",
+      "label": "按周交付"
+    },
+    {
+      "id": "out",
+      "label": "明确不做"
+    }
+  ],
+  "modules": [
+    [
+      "账号与鉴权",
+      "P0",
+      "POST /v1/auth/login；JWT 或随机 token；所有业务接口校验",
+      "无 token 或过期一律 401。Key 只在环境变量"
+    ],
+    [
+      "设备绑定",
+      "P0",
+      "POST /v1/devices/bind：校验 device_id + 短码；账号下挂设备",
+      "绑成功后该设备能开会话。Windows 不走绑定向导，但登录后能看到已绑设备"
+    ],
+    [
+      "会话与持麦",
+      "P0",
+      "POST /v1/sessions；同一时刻只一个 holder；takeover / listen / release",
+      "第二端想说话必须 takeover。管理操作不打断当前 TTS"
+    ],
+    [
+      "语音流水线",
+      "P0",
+      "WS /v1/sessions/{id}/audio：上行 PCM 16kHz 单声道（可后加 opus）；ASR → LLM → TTS",
+      "半双工：TTS 播放中忽略新音频，直到客户端发 interrupt"
+    ],
+    [
+      "情绪标签",
+      "P0",
+      "下行先 JSON emotion，再音频。枚举固定：think / speak（云端必发）；idle/listen/quiet/silent/alarm/offline 由端上发或本地切",
+      "第一包音频到达前，客户端已经收到 emotion。禁止音频比标签早"
+    ],
+    [
+      "长期记忆",
+      "P0",
+      "GET/PUT /v1/memory；与短期对话分开存。每轮把记忆摘要注入 LLM",
+      "写入「我叫小王」后，新会话能叫出小王。三端读到同一份"
+    ],
+    [
+      "人设",
+      "P0",
+      "系统提示词 + 可编辑人设字段（随 settings 或 memory 的 persona）",
+      "改人设后下一轮回复口吻变化，不需要重启服务"
+    ],
+    [
+      "闹钟同步",
+      "P0",
+      "GET/PUT /v1/alarms 只存配置（时间、重复、文案）",
+      "云端宕机或断网，端上已同步的闹钟仍响。云端绝不在到点调模型"
+    ],
+    [
+      "设置",
+      "P0",
+      "PUT /v1/settings：音量、勿扰、默认语音模式、proactive_enabled",
+      "关掉 proactive 后，除用户点的对话和本地闹钟外，云端不得再下发主动 TTS"
+    ],
+    [
+      "主动开口策略",
+      "P0",
+      "白名单场合 + 选端（watch/phone/pc）+ 勿扰再判 + 每日上限。有 pc 在线则长句走 pc",
+      "策略用规则，不要每分钟喊一次大模型闲聊"
+    ],
+    [
+      "主动开口通道",
+      "P1",
+      "POST /v1/nudges：scene、text 或 generate、target、fire_at（可 delay）",
+      "勿扰返回 423。闹钟响铃不走 nudges"
+    ],
+    [
+      "预生成缓存句",
+      "P1",
+      "设闹钟或 nudge 时生成一句 TTS/文本，随配置下发到端",
+      "到点播缓存，不现场调模型。没有缓存就只响铃"
+    ],
+    [
+      "对话设闹钟",
+      "P1",
+      "LLM 把「十分钟后叫我」写成 alarms 记录，同步到各端",
+      "只写配置。到点仍本地响"
+    ],
+    [
+      "打断",
+      "P0",
+      "WS 控制帧 interrupt：停 TTS 生成和推流",
+      "从收到 interrupt 到音频流结束 ≤ 200ms"
+    ],
+    [
+      "字幕文本",
+      "P0",
+      "下行带 transcript（用户）和 reply_text（助手），给小声/勿扰叠字幕",
+      "静音策略在端上；云端只要把字送出去"
+    ],
+    [
+      "健康检查",
+      "P0",
+      "GET /health；日志打 request_id；token/费用可查",
+      "客户端连不上时能区分：服务挂了 vs 模型超时"
+    ],
+    [
+      "设备吊销",
+      "P1",
+      "吊销后该 device 不能拉记忆、不能开麦",
+      "9/18 前有则演示，没有就口述"
+    ]
+  ],
+  "metrics": [
+    [
+      "服务能起",
+      "必须",
+      "本机 uvicorn 起 FastAPI，GET /health 返回 200",
+      "< 100 ms",
+      "8/21"
+    ],
+    [
+      "接口表落地",
+      "必须",
+      "仓库 README 或 openapi.json 与看板「接口约定」一致，字段名不许私自改",
+      "0 处和看板冲突",
+      "8/21"
+    ],
+    [
+      "文字一轮",
+      "必须",
+      "登录 → 开会话 → 发一句中文 → 收回复，记忆可写可读",
+      "p95 < 3 s（Wi-Fi，不含冷启动）",
+      "9/02"
+    ],
+    [
+      "语音一轮",
+      "必须",
+      "用户说完（VAD/松键）到第一包 TTS 音频",
+      "p50 ≤ 1.5 s，p95 ≤ 3 s（假手表 + 家里 Wi-Fi）",
+      "9/02"
+    ],
+    [
+      "情绪先于声音",
+      "必须",
+      "WS 事件顺序：emotion=think 或 speak，然后才是 audio 帧",
+      "100% 轮次标签早于音频 ≥ 80 ms",
+      "9/02"
+    ],
+    [
+      "记忆跨会话",
+      "必须",
+      "会话 A 写入偏好，会话 B 回复中用到",
+      "手工 5 条用例全过",
+      "9/02"
+    ],
+    [
+      "单持麦",
+      "必须",
+      "已有 holder 时第二端开麦被拒，必须走 takeover",
+      "对打 20 次，0 次双持麦",
+      "9/08"
+    ],
+    [
+      "打断 TTS",
+      "必须",
+      "播放中发 interrupt",
+      "流在 200 ms 内停，不再出新音频包",
+      "9/08"
+    ],
+    [
+      "密钥安全",
+      "必须",
+      "git grep 无 sk-/AKIA/火山 key；.env 在 gitignore",
+      "扫描 0 命中",
+      "全程"
+    ],
+    [
+      "主动总开关",
+      "必须",
+      "proactive_enabled=false 时发 nudge",
+      "拒绝，0 次主动 TTS",
+      "9/08"
+    ],
+    [
+      "勿扰不主动",
+      "必须",
+      "DND 开着时 fire nudge",
+      "不下发音频；闹钟通道除外",
+      "9/08"
+    ],
+    [
+      "识别能用",
+      "应该",
+      "10 句日常中文短句（1–8 秒）",
+      "≥ 8 句意图正确（不必逐字）",
+      "9/08"
+    ],
+    [
+      "费用可控",
+      "应该",
+      "日志记 input/output tokens；设月额度，超额返回 offline 语义",
+      "额度到达后端上能收到错误而不是瞎回",
+      "9/18"
+    ],
+    [
+      "TLS",
+      "应该",
+      "对外 WSS/HTTPS；局域网演示可用 HTTP，文档写明",
+      "演示当天假手表能连上所用地址",
+      "9/18"
+    ]
+  ],
+  "weeks": [
+    [
+      "W1 8/18–8/21",
+      "Hello",
+      "Python 3.12、FastAPI、/health、开通火山或阿里 LLM+ASR+TTS、Key 进环境变量、把接口表写进仓库"
+    ],
+    [
+      "W2 8/24–8/28",
+      "文字闭环",
+      "login、session、文字对话、SQLite 记忆 PUT/GET、系统人设。给客户端一份可 curl 的示例"
+    ],
+    [
+      "W3 8/31–9/02",
+      "语音闭环",
+      "WS 音频、ASR、LLM、TTS 流、emotion 先下。M1：一轮语音 + 记忆能写。达标 1.5s/3s"
+    ],
+    [
+      "W4 9/03–9/08",
+      "对接假手表",
+      "持麦/接管、settings、alarms、proactive_enabled、interrupt。陪客户端联调，不改字段名"
+    ],
+    [
+      "W5 9/09–9/17",
+      "稳住 + 主动开口",
+      "修超时弱网。有余力做 nudges + 预生成缓存句 + 选端（电脑优先）"
+    ],
+    [
+      "W6 9/18",
+      "演示",
+      "按验收 8 步能走通云端部分。只修问题，不新开模型或向量库"
+    ]
+  ],
+  "handoff": [
+    [
+      "交给客户端",
+      "Base URL、登录示例、WS 帧格式（emotion / audio / text / interrupt）、settings.proactive_enabled、nudges 字段"
+    ],
+    [
+      "向客户端收",
+      "假手表能连；PCM 采样率约定（建议 16 kHz / 16bit / mono）；松键或 VAD 结束帧"
+    ],
+    [
+      "不收硬件的",
+      "GPIO、接线照片、4G AT。云端只认「有没有网、音频在不在 WS 里」"
+    ]
+  ],
+  "out": [
+    [
+      "端侧大模型 / Ollama / 本地语音模型",
+      "表上算力不够，电脑也会拖垮 37 天"
+    ],
+    [
+      "自己训练或微调",
+      "用豆包/百炼现成接口"
+    ],
+    [
+      "唤醒词",
+      "本期冻结不做；那是客户端以后接 ESP-SR"
+    ],
+    [
+      "闹钟响铃、勿扰执行",
+      "只同步配置；到点是端上的事"
+    ],
+    [
+      "Flutter / Arduino / 接线",
+      "那是客户端和硬件"
+    ],
+    [
+      "真全双工、服务器回声消除",
+      "半双工：它说时不抢麦"
+    ],
+    [
+      "向量数据库、RAG 平台、Docker 全家桶",
+      "SQLite + 一份记忆摘要够演示"
+    ],
+    [
+      "主动搭话推送当成闲聊机器人",
+      "只做白名单场合。没有勾选就闭嘴"
+    ],
+    [
+      "读取手机日历、微信、电脑屏幕",
+      "智能来自同一云端大脑 + 大屏管理，不靠扒系统通知"
+    ],
+    [
+      "到点现场调模型",
+      "闹钟和缓存句在端上执行。生成放在有网有大屏的时候"
+    ]
+  ]
+}</script>
+  <script>
+    const DATA = JSON.parse(document.getElementById("board-data").textContent);
+    
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[c]));
+    }
+    function pills(items, current, attr) {
+      return items.map((item) => {
+        const id = typeof item === "string" ? item : item.id;
+        const label = typeof item === "string" ? item : item.label;
+        return `<button class="pill ${current === id ? "active" : ""}" data-${attr}="${esc(id)}">${esc(label)}</button>`;
+      }).join("");
+    }
+    function table(headers, rows, tones, striped) {
+      const body = rows.map((row, i) => {
+        const tone = tones && tones[i] ? ` tone-${tones[i]}` : "";
+        const stripe = striped ? " stripe" : "";
+        return `<tr class="${tone}${stripe}">${row.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
+      }).join("");
+      return `<table><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
+    }
+    function stats(items) {
+      return `<div class="stats">${items.map((s) => `<div class="stat ${s.tone || ""}"><b>${esc(s.value)}</b><span>${esc(s.label)}</span></div>`).join("")}</div>`;
+    }
+    function callout(title, body, tone) {
+      return `<div class="callout ${tone || ""}"><strong>${esc(title)}</strong>${esc(body)}</div>`;
+    }
+
+    
+    const state = { view: "nudge", bar: "全部" };
+    function renderScope() {
+      return `${callout("一句话", "不训练模型。把 ASR/LLM/TTS 接成 BondWatch API。自主开口也归你：默认安静、白名单、选端、可关。", "warn")}
+        ${stats([
+          { value: "9/02", label: "云端能对话（M1）", tone: "warn" },
+          { value: "1.5 s", label: "说完到第一包音频 p50" },
+          { value: "可关", label: "主动开口总开关", tone: "info" },
+        ])}
+        <h3>和另外两人的交接</h3>
+        ${table(["方向","内容"], DATA.handoff, null, true)}
+        <h3>技术约束</h3>
+        ${table(["选这个","不要改成"], [
+          ["FastAPI + SQLite 本机先跑","一上来 Docker/Postgres"],
+          ["云厂商 ASR/LLM/TTS","自建模型"],
+          ["情绪先于音频","自己发明表情 JSON"],
+          ["到点播缓存句","闹钟现场调模型"],
+        ], ["info","danger","warning","danger"])}`;
+    }
+    function renderBuild() {
+      const rows = DATA.modules.filter((x) => state.bar === "全部" || x[1] === state.bar);
+      const tones = rows.map((x) => x[1] === "P0" ? "info" : "neutral");
+      return `<div class="row">${pills(["全部","P0","P1"].map((x)=>({id:x,label:x})), state.bar, "bar")}</div>
+        ${table(["模块","优先级","具体实现","做到什么算完成"], rows, tones, true)}
+        <h3>语音一帧顺序</h3>
+        ${table(["顺序","谁发","内容"], [
+          ["1","端","audio 帧；松键发 end"],
+          ["2","云","emotion = think"],
+          ["3","云","emotion = speak + reply_text"],
+          ["4","云","TTS 音频帧"],
+          ["5","端可选","interrupt → 立刻停 4"],
+        ], ["info","warning","success","success","danger"])}`;
+    }
+    function renderMetric() {
+      const rows = DATA.metrics.filter((x) => state.bar === "全部" || x[1] === state.bar);
+      const tones = rows.map((x) => x[1] === "必须" ? "warning" : "info");
+      return `${callout("怎么测延迟", "计时从上行最后一包到下行第一包 audio。家里 Wi-Fi。", "info")}
+        <div class="row">${pills(["全部","必须","应该"].map((x)=>({id:x,label:x})), state.bar, "bar")}</div>
+        ${table(["指标","档","测什么","数值","最晚"], rows, tones, true)}
+        <h3>9/18 你要能当场做的</h3>
+        ${table(["步","云端负责的部分"], [
+          ["假手表说话","一轮 ASR→LLM→TTS，脸在出声前变"],
+          ["静音看字幕","reply_text 有字"],
+          ["记忆","现场说一个偏好，下一轮能用"],
+          ["电脑接管","session_id 不变"],
+          ["关掉主动说话","nudge 被拒绝，除闹钟外不出声"],
+        ], null, true)}`;
+    }
+    function renderNudge() {
+      return `${callout("自主意识 = 白名单场合，不是随时插嘴", "闹钟只是到点开口的一种。有手机/电脑时把决策和长句做完，表上只执行短句或缓存。默认安静，用户能关。", "warn")}
+        <h3>策略</h3>
+        ${table(["规则","实现要点"], [
+          ["默认安静","没有 scene 匹配，不生成、不推送"],
+          ["总开关","proactive_enabled=false → 所有 nudge 拒绝"],
+          ["勿扰再判","下发前读 DND；是则不下音频"],
+          ["选端","pc 在线且空闲 → pc；否则 phone；表只短句或缓存"],
+          ["不抢麦","已有 holder 则推迟或改到另一端"],
+          ["先生成后执行","fire_at 到达时播缓存，不现场调 LLM"],
+          ["每日上限","主动次数（不含用户闹钟）默认 3"],
+        ], null, true)}
+        <h3>场合怎么落地</h3>
+        ${table(["场合","云端做什么","档"], [
+          ["到点闹钟","只同步 alarms，不调模型","P0"],
+          ["闹钟后一句","设置时生成缓存字段","P1"],
+          ["对话设提醒","LLM tool → 写 alarms","P1"],
+          ["久未对话","看 last_session_at，可 delay","P1"],
+          ["电脑空闲打开","下发短问候到 pc","P1"],
+          ["记忆里的日子","读 memory 日期，本期可空着","P2"],
+        ], ["info","warning","warning","warning","warning","neutral"])}`;
+    }
+    function renderWeek() {
+      return `${callout("M1 是硬节点", "9/02 前必须文字或语音一轮 + 记忆能写。", "warn")}
+        ${table(["周","主题","交出来"], DATA.weeks, null, true)}`;
+    }
+    function renderOut() {
+      return table(["不做","原因"], DATA.out, DATA.out.map(() => "danger"), true);
+    }
+    const pages = { scope: renderScope, build: renderBuild, metric: renderMetric, nudge: renderNudge, week: renderWeek, out: renderOut };
+    function render() {
+      document.getElementById("tabs").innerHTML = pills(DATA.views, state.view, "view");
+      document.getElementById("app").innerHTML = pages[state.view]();
+    }
+    document.body.addEventListener("click", (e) => {
+      const t = e.target.closest("[data-view],[data-bar]");
+      if (!t) return;
+      if (t.dataset.view) { state.view = t.dataset.view; state.bar = "全部"; }
+      if (t.dataset.bar) state.bar = t.dataset.bar;
+      render();
+    });
+    render();
+
+  </script>
+</body>
+</html>

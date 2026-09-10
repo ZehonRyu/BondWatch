@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>下载 BondWatch</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/app.css?v=1.0.1" />
+</head>
+<body class="download-page">
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+  <main class="download-hero">
+    <p class="eyebrow">BondWatch</p>
+    <h1>装到手机上调假手表</h1>
+    <p class="lead">同一 Wi-Fi，点下面按钮下载 APK。安装时允许「未知来源」。</p>
+    <a class="primary apk-btn off" id="apk-btn" href="/downloads/bondwatch.apk">正在检查安装包…</a>
+    <p class="muted" id="apk-meta">连上这台电脑的局域网后就能下。</p>
+    <p class="hint" id="apk-url"></p>
+    <div class="fallback">
+      <p>也可以先用网页版，不用装包。</p>
+      <a id="web-link" href="/">打开网页伴侣</a>
+    </div>
+  </main>
+  <script>
+    (async () => {
+      const btn = document.getElementById("apk-btn");
+      const meta = document.getElementById("apk-meta");
+      const urlEl = document.getElementById("apk-url");
+      const web = document.getElementById("web-link");
+      const info = await fetch("/v1/updates?t=" + Date.now()).then((r) => r.json()).catch(() => ({}));
+      if (info.web_url) web.href = info.web_url;
+      if (info.apk_ready && info.apk_url) {
+        const mb = ((info.apk_size || 0) / 1048576).toFixed(1);
+        btn.href = info.apk_url;
+        btn.textContent = "下载 Android APK";
+        btn.classList.remove("off");
+        meta.textContent = `v${info.version}（build ${info.build}）${mb > 0 ? " · " + mb + " MB" : ""}`;
+        urlEl.textContent = info.apk_url;
+      } else {
+        btn.removeAttribute("href");
+        btn.textContent = "APK 还在打包";
+        meta.textContent = "云端已就绪。装好 Android SDK 后会自动出现下载按钮。先用网页版调试。";
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BondWatch · 软件需求与 UI 设计（审阅稿）</title>
+  <style>
+    :root {
+      --bg: #f0efeb;
+      --fg: #141414;
+      --muted: #5a5a5a;
+      --line: #d4d1c8;
+      --card: #fff;
+      --accent: #1a5cff;
+      --ok: #0d6b4c;
+      --warn: #8a5a00;
+      --warn-bg: #fff8e6;
+      --info-bg: #eaf0ff;
+      --phase1: #1a5cff;
+      --phase2: #0d6b4c;
+      --phase3: #6b3fa0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 15px/1.55 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 80px; }
+    h1 { font-size: 1.75rem; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.02em; }
+    h2 { font-size: 1.15rem; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+    h3 { font-size: 0.95rem; margin: 20px 0 8px; }
+    .sub { color: var(--muted); margin: 0 0 20px; }
+    .draft {
+      display: inline-block;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--warn-bg);
+      color: var(--warn);
+      font-weight: 600;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    .callout {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin: 0 0 16px;
+    }
+    .callout.info { background: var(--info-bg); border-color: #c5d2f5; }
+    .callout.warn { background: var(--warn-bg); border-color: #e8d59a; }
+    .callout strong { display: block; margin-bottom: 4px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    @media (max-width: 800px) {
+      .grid2, .grid3 { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .card h3 { margin-top: 0; }
+    .muted { color: var(--muted); font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 13px; margin: 0 0 12px; border-radius: 8px; overflow: hidden; }
+    th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #f7f6f2; font-weight: 600; }
+    .tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 1px 7px;
+      border-radius: 999px;
+      margin-right: 4px;
+    }
+    .t1 { background: #e8efff; color: var(--phase1); }
+    .t2 { background: #e6f5ef; color: var(--phase2); }
+    .t3 { background: #f0e8f8; color: var(--phase3); }
+    .t0 { background: #eee; color: #555; }
+    ul.tight li { margin: 4px 0; }
+    .phone {
+      width: 200px;
+      height: 268px;
+      margin: 0 auto;
+      border-radius: 28px;
+      background: linear-gradient(165deg, #1a2744, #0a0a0c);
+      border: 3px solid #333;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,.25);
+    }
+    .phone .bar {
+      position: absolute; left: 0; right: 0; top: 0; height: 36px;
+      display: flex; justify-content: space-between; padding: 10px 12px 0;
+      font-size: 10px; color: #f5f5f7; font-weight: 600;
+    }
+    .phone .face {
+      position: absolute; left: 50%; top: 48%; transform: translate(-50%, -50%);
+      width: 72px; height: 72px; border-radius: 50%; background: #5b9cff;
+      box-shadow: -28px -22px 0 -20px #5b9cff, 28px -22px 0 -20px #5b9cff;
+    }
+    .phone .hint {
+      position: absolute; left: 12px; right: 12px; bottom: 28px;
+      font-size: 10px; color: #8e8e93; line-height: 1.35;
+    }
+    .phone .homeind {
+      position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+      width: 48px; height: 3px; border-radius: 2px; background: rgba(255,255,255,.35);
+    }
+    .flow {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 16px;
+    }
+    .flow .node {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .flow .arrow { color: var(--muted); }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .toc li { margin: 4px 0; }
+    footer { margin-top: 48px; color: var(--muted); font-size: 12px; }
+    code { font-size: 12px; background: #eee; padding: 1px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>BondWatch 软件需求与 UI 设计<span class="draft">审阅稿 v0.1</span></h1>
+    <p class="sub">
+      约束：开源 <b>FreeRTOS</b>（ESP32-S3 / Espressif）· 表端不跑大模型 · 默认中文。
+      关联：<a href="bondwatch-board.html">总看板需求表</a> ·
+      <a href="bondwatch-sim.html">界面模拟</a> ·
+      本文专门把<strong>软件端 / 界面 / 手势</strong>说清楚，供你改完再冻结。
+    </p>
+
+    <div class="callout info">
+      <strong>先看结论（给负责人）</strong>
+      在 FreeRTOS 上把体验做「高级」，靠的不是换手表 OS，而是：<b>清晰的信息架构 + 克制的手势语言 + 少闪烁的局部刷新 + 表情/字幕叙事</b>。
+      建议分三期：① 表盘壳（现在）② 对话体验 ③ 多端大脑。界面先定稿在模拟器/Flutter，再往固件搬。
+    </div>
+
+    <div class="card toc">
+      <h3 style="margin-top:0">目录</h3>
+      <ol class="tight">
+        <li><a href="#pos">产品定位（软件视角）</a></li>
+        <li><a href="#arch">软件架构（FreeRTOS）</a></li>
+        <li><a href="#req">软件需求（分期）</a></li>
+        <li><a href="#ia">界面信息架构</a></li>
+        <li><a href="#gesture">手势与按键语言</a></li>
+        <li><a href="#visual">怎样把 UI 做高级</a></li>
+        <li><a href="#best">怎样把整体做得最好</a></li>
+        <li><a href="#freeze">待你拍板的冻结项</a></li>
+      </ol>
+    </div>
+
+    <h2 id="pos">1. 产品定位（软件视角）</h2>
+    <div class="grid2">
+      <div class="card">
+        <h3>它是什么</h3>
+        <p>手腕上的 <b>AI 伴侣终端</b>：眼睛（表情/字幕）+ 嘴巴（听/说），大脑在云端。</p>
+        <p class="muted">不是运动表，不是应用商店生态表，不做完整 watchOS。</p>
+      </div>
+      <div class="card">
+        <h3>软件边界</h3>
+        <ul class="tight">
+          <li><b>表端 FreeRTOS</b>：显示、触摸、键、闹钟、勿扰、网络收发</li>
+          <li><b>手机 Flutter</b>：绑定、管理、假手表、长聊放大</li>
+          <li><b>云 Python</b>：ASR / LLM / TTS / 记忆 / 情绪标签</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2 id="arch">2. 软件架构（FreeRTOS）</h2>
+    <p class="muted">ESP32 Arduino/IDF 底层已是 FreeRTOS。推荐任务划分（可渐进落地）：</p>
+    <table>
+      <thead>
+        <tr><th>任务</th><th>优先级</th><th>职责</th><th>注意</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>ui_task</code></td>
+          <td>高</td>
+          <td>组帧、局部刷新、页面状态机</td>
+          <td>禁止在 UI 里阻塞读麦/网络</td>
+        </tr>
+        <tr>
+          <td><code>input_task</code></td>
+          <td>高</td>
+          <td>触摸手势、实体键去抖</td>
+          <td>输出统一 Gesture 事件队列</td>
+        </tr>
+        <tr>
+          <td><code>audio_task</code></td>
+          <td>中（二期）</td>
+          <td>I2S 采播、VAD 可选</td>
+          <td>默认关闭；按需 start/stop</td>
+        </tr>
+        <tr>
+          <td><code>net_task</code></td>
+          <td>中（二期）</td>
+          <td>Wi‑Fi / 4G、会话 API</td>
+          <td>断网降级：闹钟/勿扰/提示脸</td>
+        </tr>
+        <tr>
+          <td><code>persist_task</code></td>
+          <td>低</td>
+          <td>NVS 亮度/语言/触摸映射</td>
+          <td>不存长期记忆正文</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>UI 技术选型建议</strong>
+      现阶段：Adafruit GFX + U8g2 中文（已跑通）。<br />
+      界面继续加深时：迁 <b>LVGL on FreeRTOS</b>（业界 MCU 表常见，动画/列表更高级，仍开源）。
+      不要为「看起来像智能表」去换 Wear OS 模组，除非产品形态改成买现成表芯。
+    </div>
+
+    <h2 id="req">3. 软件需求（分期）</h2>
+    <p><span class="tag t1">一期 表盘壳</span> 现在 · 语音可关 · 把「戴着好看、摸着顺」做稳</p>
+    <table>
+      <thead><tr><th>ID</th><th>需求</th><th>验收</th></tr></thead>
+      <tbody>
+        <tr><td>S1-01</td><td>竖屏主页：表情 + 状态 + 中文提示</td><td>静止无整屏闪烁；分钟级时钟局部刷新</td></tr>
+        <tr><td>S1-02</td><td>下滑控制中心：亮度 / 音量 / 勿扰 / 锁屏</td><td>局部刷新，点按不整页闪</td></tr>
+        <tr><td>S1-03</td><td>上滑应用墙：闹钟 / 声音 / 设置等入口</td><td>6 宫格可点，下滑回主页</td></tr>
+        <tr><td>S1-04</td><td>设置：亮度、声音、勿扰、语言、触摸校准</td><td>中/英切换；触摸 X/Y 可校准</td></tr>
+        <tr><td>S1-05</td><td>本地闹钟（到点响/表情）</td><td>断网仍可倒计时提醒（蜂鸣或表情）</td></tr>
+        <tr><td>S1-06</td><td>电源键亮灭屏；音量键循环音量档</td><td>与屏上手势不冲突</td></tr>
+      </tbody>
+    </table>
+
+    <p><span class="tag t2">二期 对话伴侣</span> 开麦之后</p>
+    <table>
+      <thead><tr><th>ID</th><th>需求</th><th>验收</th></tr></thead>
+      <tbody>
+        <tr><td>S2-01</td><td>点按/对讲进入听→想→说</td><td>一轮完整；可打断</td></tr>
+        <tr><td>S2-02</td><td>云端情绪标签先于 TTS</td><td>表情先变，再出声</td></tr>
+        <tr><td>S2-03</td><td>字幕叠在表情上；勿扰仅字幕</td><td>静音可演示</td></tr>
+        <tr><td>S2-04</td><td>默认关 Auto‑VAD；可选手动开</td><td>待机不持续上传音频</td></tr>
+        <tr><td>S2-05</td><td>断网提示脸 + 排队/失败提示</td><td>有网后可补发或明确失败</td></tr>
+      </tbody>
+    </table>
+
+    <p><span class="tag t3">三期 多端大脑</span> 与看板 P02/P06 对齐</p>
+    <table>
+      <thead><tr><th>ID</th><th>需求</th><th>验收</th></tr></thead>
+      <tbody>
+        <tr><td>S3-01</td><td>手机绑定、人设与记忆管理</td><td>三端同一角色</td></tr>
+        <tr><td>S3-02</td><td>电脑可接管长聊；表旁听/熄屏</td><td>同时仅一端持麦</td></tr>
+        <tr><td>S3-03</td><td>白名单主动开口 + 总开关</td><td>关掉后除闹钟不主动出声</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="ia">4. 界面信息架构</h2>
+    <div class="grid2">
+      <div>
+        <div class="flow">
+          <span class="node">主页</span><span class="arrow">↓下滑</span>
+          <span class="node">控制中心</span>
+        </div>
+        <div class="flow">
+          <span class="node">主页</span><span class="arrow">↑上滑</span>
+          <span class="node">应用墙</span><span class="arrow">→</span>
+          <span class="node">闹钟 / 声音 / 设置…</span>
+        </div>
+        <div class="flow">
+          <span class="node">主页</span><span class="arrow">←左滑</span>
+          <span class="node">闹钟快捷</span>
+        </div>
+        <div class="flow">
+          <span class="node">任意层</span><span class="arrow">↓或完成</span>
+          <span class="node">回主页</span>
+        </div>
+        <p class="muted">原则：主页只做「伴侣脸」；系统能力进控制中心；低频能力进应用/设置。避免把主页做成仪表盘。</p>
+      </div>
+      <div class="phone" title="主页示意">
+        <div class="bar"><span>09:41</span><span>USB</span></div>
+        <div class="face"></div>
+        <div class="hint">待机<br />下滑打开控制中心</div>
+        <div class="homeind"></div>
+      </div>
+    </div>
+
+    <h3>页面清单（一期）</h3>
+    <table>
+      <thead><tr><th>页面</th><th>目的</th><th>高级感要点</th></tr></thead>
+      <tbody>
+        <tr><td>主页</td><td>情绪在场</td><td>大表情、少字、底部一条 hint、无麦条（语音关时）</td></tr>
+        <tr><td>控制中心</td><td>3 秒内改状态</td><td>大模块、即时反馈、局部刷新</td></tr>
+        <tr><td>应用墙</td><td>探索入口</td><td>规整图标网格、短中文名</td></tr>
+        <tr><td>设置列表</td><td>完整偏好</td><td>分组列表、右侧状态值、选中高亮</td></tr>
+        <tr><td>声音</td><td>精细音量</td><td>± 大按钮、只刷新数值</td></tr>
+        <tr><td>闹钟</td><td>本地提醒</td><td>+1/+5/+15、倒计时一行</td></tr>
+        <tr><td>触摸校准</td><td>救场</td><td>十字/光标跟随，不整屏闪</td></tr>
+        <tr><td>锁屏/息屏</td><td>省电隐私</td><td>纯黑；任意触或电源唤醒</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="gesture">5. 手势与按键语言（已冻结 · Model B）</h2>
+    <div class="callout">
+      <strong>用户只记三件事</strong>
+      <b>点一下脸 = 说话</b>（一期仅提示「语音已关」）·
+      <b>下滑 = 控制中心</b> ·
+      <b>上滑 = 应用</b>。左右滑 / 双击息屏 / 长按勿扰已取消。息屏靠电源键或控制中心「锁屏」；2 分钟主页无操作自动息屏。
+    </div>
+    <table>
+      <thead><tr><th>输入</th><th>主页</th><th>子页</th><th>对话中（二期）</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>点一下</td><td>一期：轻提示；二期：对讲</td><td>激活控件</td><td>打断</td>
+        </tr>
+        <tr>
+          <td>下滑</td><td>控制中心</td><td>回主页</td><td>忽略</td>
+        </tr>
+        <tr>
+          <td>上滑</td><td>应用墙</td><td>设置列表滚动</td><td>忽略</td>
+        </tr>
+        <tr>
+          <td>左右滑 / 双击 / 长按</td><td>无</td><td>无</td><td>无</td>
+        </tr>
+        <tr>
+          <td>电源短按</td><td>亮/灭</td><td>同左</td><td>同左</td>
+        </tr>
+        <tr>
+          <td>音量短按</td><td>循环音量</td><td>同左</td><td>同左</td>
+        </tr>
+        <tr>
+          <td>音量长按</td><td>打开设置</td><td>同左</td><td>同左</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="muted">应用墙：主页 / 时钟 / 闹钟 / 秒表 / 声音 / 设置。控制中心含勿扰、手电、亮度、音量、锁屏、进应用。</p>
+
+    <h2 id="visual">6. 怎样把 UI 做高级（FreeRTOS 可行）</h2>
+    <div class="grid3">
+      <div class="card">
+        <h3>1. 少即是多</h3>
+        <p class="muted">主页禁止仪表盘：不要 WiFi/4G/亮度一排图标抢脸。状态最多一行，伴侣脸占视觉中心。</p>
+      </div>
+      <div class="card">
+        <h3>2. 零闪烁</h3>
+        <p class="muted">禁止每次点击 <code>fillScreen</code>。局部脏矩形；列表/音量/控制中心已验证这条路。</p>
+      </div>
+      <div class="card">
+        <h3>3. 动效克制</h3>
+        <p class="muted">MCU 上「高级」= 短促过渡（8–12 帧滑入）+ 眨眼偶发，而不是每帧挥手重绘。</p>
+      </div>
+      <div class="card">
+        <h3>4. 中文排版</h3>
+        <p class="muted">标题/正文两级字号；hint 用次要色；避免英文残留。语言设置全局 <code>tr()</code>。</p>
+      </div>
+      <div class="card">
+        <h3>5. 情绪叙事</h3>
+        <p class="muted">高级感来自「它像活的」：听/想/说/勿扰/没网各有脸与一句人话，而不是 Technical Error。</p>
+      </div>
+      <div class="card">
+        <h3>6. 触感对齐</h3>
+        <p class="muted">触摸映射可校准；热区大于视觉按钮；左右加减与坐标一致（已踩过坑）。</p>
+      </div>
+    </div>
+
+    <h3>视觉规范（建议）</h3>
+    <table>
+      <thead><tr><th>元素</th><th>建议</th></tr></thead>
+      <tbody>
+        <tr><td>分辨率</td><td>240×320 竖屏锁定（一期）</td></tr>
+        <tr><td>主色</td><td>黑底；伴侣填充色随情绪变；强调色限 1 个（蓝/绿）</td></tr>
+        <tr><td>圆角</td><td>控制中心大模块 16–18px；列表行 8–10px</td></tr>
+        <tr><td>首页指标条</td><td>底部细胶囊（home indicator），暗示「可上滑」</td></tr>
+        <tr><td>禁用态</td><td>语音关时模块变灰并写「语音关」，不要假装能点</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="best">7. 怎样把整体做得最好</h2>
+    <ol>
+      <li><b>双轨 UI</b>：交互与文案先在 <code>bondwatch-sim.html</code> / Flutter 假手表定稿，每周只向固件合入「已冻结」页。</li>
+      <li><b>表情库优先于皮肤</b>：先做出 6–8 种可读情绪脸，比换主题更赚「高级感」。</li>
+      <li><b>二期语音要「半双工礼貌」</b>：它说时你点按才打断；默认不开常听，建立信任。</li>
+      <li><b>云端人格资产</b>：人设、记忆、场合白名单放云端；表端只缓存闹钟/勿扰/亮度。</li>
+      <li><b>演示脚本</b>：准备 60 秒演示——亮屏脸 → 控制中心勿扰 → 闹钟 →（二期）一轮对话表情对得上。</li>
+      <li><b>何时上 LVGL</b>：当设置超过一屏、需要滑列表惯性/开关组件时再迁；现在不必为迁而迁。</li>
+    </ol>
+
+    <h2 id="freeze">8. 冻结项（v0.2 已拍板）</h2>
+    <table>
+      <thead><tr><th>#</th><th>问题</th><th>决定</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>主页点一下一期行为</td><td>轻提示「语音已关」；二期绑对讲</td></tr>
+        <tr><td>2</td><td>第二实体键</td><td>音量；对讲靠触摸</td></tr>
+        <tr><td>3</td><td>应用墙</td><td>保留（主页/时钟/闹钟/秒表/声音/设置）</td></tr>
+        <tr><td>4</td><td>横屏</td><td>一期锁定竖屏</td></tr>
+        <tr><td>5</td><td>UI 库</td><td>继续 GFX；列表痛了再迁 LVGL</td></tr>
+        <tr><td>6</td><td>手势方案</td><td><b>Model B</b>（已写入固件与模拟器）</td></tr>
+      </tbody>
+    </table>
+
+    <footer>
+      BondWatch · 软件需求与 UI 设计审阅稿 v0.1 · FreeRTOS / ESP32-S3 · 可离线打开<br />
+      总原则仍以 <a href="bondwatch-board.html">bondwatch-board.html</a> 产品需求为准；本文是软件与交互的展开与修订提案。
+    </footer>
+  </div>
+</body>
+</html>

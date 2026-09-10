@@ -1,0 +1,220 @@
+{
+  "version": 1,
+  "author": "BondWatch",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-text",
+      "id": "title",
+      "top": -240,
+      "left": -345.6,
+      "attrs": {
+        "text": "BondWatch 接线仿真  ·  ESP32-S3 N16R8\n⚠ 真机别抄仿真排针位置！只看 GPIO 数字（G11=GPIO11）\n左边屏  ·  中间板  ·  右边只接 PWR / VOL / TAP"
+      }
+    },
+
+    {
+      "type": "wokwi-ili9341",
+      "id": "lcd",
+      "top": -118.97,
+      "left": -345.67,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-text",
+      "id": "lcdPins",
+      "top": 192,
+      "left": -345.6,
+      "attrs": {
+        "text": "微雪 1.69 丝印 → GPIO\nVCC     3V3     红\nGND     GND     黑\nLCD_DIN 11      橙   （2.0 写 MOSI）\nLCD_CLK 12      黄   （2.0 写 SCLK）\nLCD_CS  10      棕\nLCD_DC   8      紫\nLCD_RST  9      粉\nLCD_BL  13      绿\n\n触摸真机才接，Wokwi 没有这些脚：\nTP_SDA  14   TP_SCL 21\nTP_IRQ  38 = 右边白键 TAP\nTP_RST  39"
+      }
+    },
+
+    {
+      "type": "board-esp32-s3-devkitc-1",
+      "id": "esp",
+      "top": -28.73,
+      "left": 52.13,
+      "attrs": {
+        "flashSize": "16",
+        "psramSize": "8",
+        "psramType": "octal"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "boardLabel",
+      "top": 192,
+      "left": 52.8,
+      "attrs": {
+        "text": "真机 Goouuu N16R8（和你照片一样）\n排针顺序 ≠ Wokwi，只看丝印 G 数字\nTX0/RX0 = USB 串口(43/44)，不是 4G\n4G 用左侧 G17、G18\n详细表：docs/bondwatch-wiring.html"
+      }
+    },
+
+    {
+      "type": "wokwi-text",
+      "id": "keysTitle",
+      "top": -67.2,
+      "left": 460.8,
+      "attrs": { "text": "真机要接的键" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btnPwr",
+      "top": -22.6,
+      "left": 470.4,
+      "attrs": { "color": "green", "label": "PWR  GPIO2", "bounce": "0" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btnPtt",
+      "top": 73.4,
+      "left": 470.4,
+      "attrs": { "color": "blue", "label": "VOL  GPIO1", "bounce": "0" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btnTap",
+      "top": 169.4,
+      "left": 470.4,
+      "attrs": { "color": "white", "label": "TAP  GPIO38", "bounce": "0" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "keysNote",
+      "top": 249.6,
+      "left": 460.8,
+      "attrs": {
+        "text": "6×6 另一脚都接地\n白键 TAP = 触摸 INT\n不是第三颗表键"
+      }
+    },
+
+    {
+      "type": "wokwi-led",
+      "id": "ledMic",
+      "top": 397.2,
+      "left": -332.2,
+      "attrs": { "color": "green", "label": "MIC=INMP441 SD" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rMic",
+      "top": 465.35,
+      "left": -336,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "spk",
+      "top": 376.8,
+      "left": -221.4,
+      "attrs": { "volume": "0.12", "label": "SPK=MAX98357 DIN" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "audioNote",
+      "top": 480,
+      "left": -211.2,
+      "attrs": {
+        "text": "真机麦  VDD=3V3  L/R=GND\nWS→4  SCK→5  SD→6\n真机喇叭  VIN=3V3\nBCLK→15  LRC→16  DIN→7"
+      }
+    },
+
+    {
+      "type": "wokwi-text",
+      "id": "simTitle",
+      "top": 336,
+      "left": 460.8,
+      "attrs": { "text": "仿真专用 · 真机不要接\nGPIO40 / 41 / 42 / 47" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledTalk",
+      "top": 397.2,
+      "left": 483.8,
+      "attrs": { "color": "orange", "label": "TALK 47" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rTalk",
+      "top": 405.35,
+      "left": 480,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledLte",
+      "top": 454.8,
+      "left": 483.8,
+      "attrs": { "color": "cyan", "label": "4G灯 41" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rLte",
+      "top": 462.95,
+      "left": 480,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btnSee",
+      "top": 509.8,
+      "left": 470.4,
+      "attrs": { "color": "yellow", "label": "SEE 40 勿接", "bounce": "0" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btnRot",
+      "top": 567.4,
+      "left": 470.4,
+      "attrs": { "color": "purple", "label": "ROT 42 勿接", "bounce": "0" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "note4g",
+      "top": 336,
+      "left": 672,
+      "attrs": {
+        "text": "4G 最后再接\n艾尔赛 Air780E\nHub 5V + 共地\n模组TX → GPIO17\n模组RX → GPIO18\n先 CH340 打 AT"
+      }
+    }
+  ],
+  "connections": [
+    ["esp:TX", "$serialMonitor:RX", "", []],
+    ["esp:RX", "$serialMonitor:TX", "", []],
+
+    ["lcd:VCC", "esp:3V3.1", "#e11d48", ["v9.6", "h57.6"]],
+    ["lcd:GND", "esp:GND.1", "#171717", ["v19.2", "h67.2"]],
+    ["lcd:MOSI", "esp:11", "#f97316", ["v28.8", "h76.8"]],
+    ["lcd:SCK", "esp:12", "#eab308", ["v38.4", "h86.4"]],
+    ["lcd:CS", "esp:10", "#a16207", ["v48", "h96"]],
+    ["lcd:D/C", "esp:8", "#a855f7", ["v57.6", "h105.6"]],
+    ["lcd:RST", "esp:9", "#ec4899", ["v67.2", "h115.2"]],
+    ["lcd:LED", "esp:13", "#22c55e", ["v76.8", "h124.8"]],
+
+    ["esp:2", "btnPwr:1.l", "#16a34a", ["h57.6"]],
+    ["btnPwr:2.r", "esp:GND.2", "#171717", ["h19.2", "v-19.2"]],
+    ["esp:1", "btnPtt:1.l", "#2563eb", ["h48"]],
+    ["btnPtt:2.r", "btnPwr:2.r", "#171717", ["h9.6", "v-57.6"]],
+    ["esp:38", "btnTap:1.l", "#d4d4d8", ["h67.2"]],
+    ["btnTap:2.r", "btnPtt:2.r", "#171717", ["h19.2", "v-57.6"]],
+
+    ["esp:6", "ledMic:A", "#16a34a", ["h-19.2", "v201.6", "h-230.4"]],
+    ["ledMic:C", "rMic:1", "#16a34a", []],
+    ["rMic:2", "esp:GND.1", "#171717", ["v9.6", "h230.4"]],
+    ["esp:7", "spk:2", "#ca8a04", ["h-28.8", "v182.4", "h-134.4"]],
+    ["spk:1", "esp:GND.1", "#171717", ["v19.2", "h134.4"]],
+
+    ["esp:47", "ledTalk:A", "#ea580c", ["h28.8", "v201.6"]],
+    ["ledTalk:C", "rTalk:1", "#ea580c", []],
+    ["rTalk:2", "esp:GND.4", "#171717", ["v9.6", "h-19.2"]],
+    ["esp:41", "ledLte:A", "#06b6d4", ["h19.2", "v230.4"]],
+    ["ledLte:C", "rLte:1", "#06b6d4", []],
+    ["rLte:2", "esp:GND.4", "#171717", ["v19.2", "h-19.2"]],
+    ["esp:40", "btnSee:1.l", "#ca8a04", ["h38.4", "v259.2"]],
+    ["btnSee:2.r", "esp:GND.4", "#171717", ["h28.8", "v19.2"]],
+    ["esp:42", "btnRot:1.l", "#7c3aed", ["h48", "v288"]],
+    ["btnRot:2.r", "btnSee:2.r", "#171717", ["h9.6", "v-19.2"]]
+  ],
+  "dependencies": {}
+}

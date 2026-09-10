@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BondWatch 接线（Goouuu N16R8）</title>
+  <style>
+    :root {
+      --bg: #0f1419; --card: #1a2332; --fg: #f3f4f6; --muted: #94a3b8;
+      --line: #334155; --ok: #34d399; --warn: #fbbf24; --no: #f87171;
+      --left: #3b82f6; --right: #a78bfa;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--fg);
+      font: 16px/1.5 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+    .wrap { max-width: 680px; margin: 0 auto; padding: 20px 14px 64px; }
+    h1 { font-size: 22px; margin: 0 0 8px; }
+    .rules { background: #1e3a5f; border: 1px solid #2563eb; border-radius: 12px;
+      padding: 14px 16px; margin-bottom: 20px; font-size: 15px; }
+    .rules b { color: #93c5fd; }
+    .rules ol { margin: 8px 0 0; padding-left: 1.2em; }
+    .rules li { margin: 4px 0; }
+    .step { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      padding: 16px; margin-bottom: 16px; }
+    .step h2 { margin: 0 0 12px; font-size: 17px; font-weight: 650; }
+    .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 6px;
+      background: #111; color: var(--ok); margin-right: 6px; vertical-align: middle; }
+    .wire { display: flex; align-items: center; gap: 8px; padding: 10px 0;
+      border-bottom: 1px solid var(--line); font-size: 15px; }
+    .wire:last-child { border-bottom: none; }
+    .from, .to { flex: 1; min-width: 0; }
+    .from .lbl { color: var(--muted); font-size: 12px; }
+    .from .name { font-family: ui-monospace, Consolas, monospace; font-weight: 600; }
+    .arrow { color: var(--muted); font-size: 20px; flex-shrink: 0; }
+    .pin { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums;
+      letter-spacing: -0.03em; line-height: 1.1; }
+    .pin small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); margin-top: 2px; }
+    .side-L { color: var(--left); }
+    .side-R { color: var(--right); }
+    .dot { width: 12px; height: 12px; border-radius: 99px; flex-shrink: 0; border: 1px solid #0005; }
+    .hint { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+    .board-wrap { display: flex; gap: 10px; margin-top: 12px; }
+    .col { flex: 1; background: #111827; border-radius: 10px; padding: 10px 8px; font-size: 12px; }
+    .col h3 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .col-L h3 { color: var(--left); }
+    .col-R h3 { color: var(--right); }
+    .p { padding: 3px 6px; border-radius: 4px; margin: 2px 0; font-family: ui-monospace, Consolas, monospace; }
+    .p.use { background: #14532d; color: #86efac; font-weight: 700; }
+    .p.pwr { background: #7f1d1d; color: #fca5a5; }
+    .p.skip { color: #64748b; }
+    .p.danger { background: #422006; color: #fcd34d; }
+    .warn-box { background: #422006; border: 1px solid #854d0e; border-radius: 12px;
+      padding: 12px 14px; margin-bottom: 16px; font-size: 14px; }
+    .warn-box b { color: var(--warn); }
+    .no { border-color: #7f1d1d; }
+    .no h2 { color: var(--no); }
+    a { color: #93c5fd; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>BondWatch 接线 · Goouuu ESP32-S3-N16R8</h1>
+
+    <div class="rules">
+      <b>只记一条：</b>屏/模块丝印写什么，就在开发板上找对应的 <b>G 数字</b>。
+      <ol>
+        <li><b>别看 Wokwi 排针上下顺序</b>——和你真机不一样，GPIO 号才对得上。</li>
+        <li>板子 <b>天线在上、USB 在下</b>，看两侧排针丝印（G1、G11…）。</li>
+        <li>屏和麦只接 <b>3V3</b>，<b>不要接 V5IN / 5V</b>。</li>
+      </ol>
+    </div>
+
+    <div class="warn-box">
+      <b>别踩坑：</b>右侧 <b>TX0 / RX0</b> 是 USB 下载口（GPIO43/44），<b>不是 4G</b>。
+      4G 用左侧 <b>G17、G18</b>。EN = 复位键（= Wokwi 的 RST）。
+    </div>
+
+    <section class="step">
+      <h2><span class="badge">地图</span>你的板子两侧丝印（绿 = 本表要用）</h2>
+      <div class="board-wrap">
+        <div class="col col-L">
+          <h3>← 左侧排针</h3>
+          <div class="p pwr">GND</div>
+          <div class="p pwr">3V3 ← 屏 VCC</div>
+          <div class="p skip">EN</div>
+          <div class="p use">G4 ← 麦 WS</div>
+          <div class="p use">G5 ← 麦 SCK</div>
+          <div class="p use">G6 ← 麦 SD</div>
+          <div class="p use">G7 ← 喇叭 DIN</div>
+          <div class="p use">G15 ← 喇叭 BCLK</div>
+          <div class="p use">G16 ← 喇叭 LRC</div>
+          <div class="p use">G17 ← 4G 模组 TX→</div>
+          <div class="p use">G18 ← 4G 模组 RX→</div>
+          <div class="p use">G8 ← 屏 LCD_DC</div>
+          <div class="p skip">G19 G20</div>
+          <div class="p skip">G3 G46</div>
+          <div class="p use">G9 ← 屏 LCD_RST</div>
+          <div class="p use">G10 ← 屏 LCD_CS</div>
+          <div class="p use">G11 ← 屏 LCD_DIN</div>
+          <div class="p use">G12 ← 屏 LCD_CLK</div>
+          <div class="p pwr">3V3</div>
+          <div class="p pwr">GND ← 屏 GND</div>
+        </div>
+        <div class="col col-R">
+          <h3>右侧排针 →</h3>
+          <div class="p pwr">GND</div>
+          <div class="p use">G1 ← 对讲键</div>
+          <div class="p use">G2 ← 电源键</div>
+          <div class="p danger">TX0 RX0 勿接4G</div>
+          <div class="p skip">G42 G41 G40</div>
+          <div class="p use">G39 ← 屏 TP_RST</div>
+          <div class="p use">G38 ← 屏 TP_IRQ</div>
+          <div class="p skip">G37…G35 G0 G45</div>
+          <div class="p skip">G48 G47</div>
+          <div class="p use">G21 ← 屏 TP_SCL</div>
+          <div class="p use">G14 ← 屏 TP_SDA</div>
+          <div class="p use">G13 ← 屏 LCD_BL</div>
+          <div class="p danger">V5IN 勿接屏</div>
+          <div class="p pwr">GND</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="step">
+      <h2><span class="badge">0</span>先通电（别的先别接）</h2>
+      <p class="hint">Hub 插墙 → S3 Type-C 插 Hub → 烧固件 → 串口出现 BondWatch 再继续。</p>
+    </section>
+
+    <section class="step" style="border-color:#2563eb">
+      <h2 style="color:#93c5fd"><span class="badge">★</span>只接屏幕 + ESP32 + 电源键能玩什么？</h2>
+      <p class="hint" style="color:#93c5fd;margin-bottom:12px"><b>你现在就是这个状态！</b>已经能跑起来一个"电子宠物"了。</p>
+      <div style="font-size:14px;line-height:1.8">
+        <div style="background:#0f2940;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+          <b style="color:#34d399">✓ 能用的功能：</b>
+          <ul style="margin:6px 0 0;padding-left:1.2em;color:#e2e8f0">
+            <li><b>屏幕亮起来</b> — 显示一个会眨眼、挥手、蹦跳的小人脸</li>
+            <li><b>时钟显示</b> — 左上角有时钟（从开机开始计时）</li>
+            <li><b>电源键控制</b>：
+              <ul style="margin:4px 0 0;padding-left:1.2em">
+                <li>单击 → 开关屏幕</li>
+                <li>双击 → 切换 DND 免打扰模式</li>
+                <li>长按 → 开关屏幕</li>
+              </ul>
+            </li>
+            <li><b>触摸交互</b>：
+              <ul style="margin:4px 0 0;padding-left:1.2em">
+                <li>屏幕关时点一下 → 亮屏</li>
+                <li>空闲时点一下 → 触发"聆听"动画（但没麦，只是视觉效果）</li>
+                <li>说话动画时点一下 → 打断回到空闲</li>
+              </ul>
+            </li>
+            <li><b>串口命令</b>（USB 连着电脑就能用）：
+              <ul style="margin:4px 0 0;padding-left:1.2em;font-family:ui-monospace,Consolas,monospace;font-size:13px">
+                <li><code>a</code> → 触发闹钟动画</li>
+                <li><code>n</code> / <code>o</code> → WiFi 开/关</li>
+                <li><code>4</code> → 切换 4G 状态</li>
+                <li><code>r</code> → 横竖屏旋转</li>
+                <li><code>h</code> → 显示所有命令</li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+        <div style="background:#3b1111;border-radius:8px;padding:10px 12px">
+          <b style="color:#f87171">✗ 还不能用的功能：</b>
+          <ul style="margin:6px 0 0;padding-left:1.2em;color:#fca5a5">
+            <li>语音对话（需要麦克风 + 喇叭）</li>
+            <li>AI 回复（需要 4G 模块联网）</li>
+            <li>对讲键（还没接）</li>
+          </ul>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:10px"><b>结论：</b>先享受你的电子宠物吧！它会眨眼、挥手、蹦跳，你可以点它玩。等杜邦线到了再接其他的。</p>
+    </section>
+
+    <section class="step">
+      <h2><span class="badge">1</span>两颗按键（各 2 根线）</h2>
+      <div class="wire">
+        <span class="dot" style="background:#16a34a"></span>
+        <div class="from"><div class="lbl">电源键</div><div class="name">一脚</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-R">G2<span><small>右侧 · GND 下第 2 个</small></span></div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#171717"></span>
+        <div class="from"><div class="lbl">电源键</div><div class="name">另一脚</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin">GND<span><small>任意 GND</small></span></div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#2563eb"></span>
+        <div class="from"><div class="lbl">对讲键</div><div class="name">一脚</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-R">G1<span><small>右侧 · GND 下第 1 个</small></span></div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#171717"></span>
+        <div class="from"><div class="lbl">对讲键</div><div class="name">另一脚</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin">GND</div></div>
+      </div>
+    </section>
+
+    <section class="step">
+      <h2><span class="badge">2</span>微雪 1.69 屏（一根线一行，按顺序接）</h2>
+      <p class="hint">2.0 屏先别用。MISO、SD_CS 空着。接完上电应亮背光、出脸。</p>
+
+      <div class="wire">
+        <span class="dot" style="background:#e11d48"></span>
+        <div class="from"><div class="lbl">屏丝印</div><div class="name">VCC</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin">3V3<span><small>左侧或右侧 3V3，不是 V5IN</small></span></div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#171717"></span>
+        <div class="from"><div class="lbl">屏丝印</div><div class="name">GND</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin">GND</div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#f97316"></span>
+        <div class="from"><div class="lbl">屏丝印</div><div class="name">LCD_DIN</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-L">G11<span><small>左侧 · 不是 TP_SDA</small></span></div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#eab308"></span>
+        <div class="from"><div class="lbl">屏丝印</div><div class="name">LCD_CLK</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-L">G12<span><small>左侧最下 GPIO</small></span></div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#a16207"></span>
+        <div class="from"><div class="lbl">屏丝印</div><div class="name">LCD_CS</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-L">G10</div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#a855f7"></span>
+        <div class="from"><div class="lbl">屏丝印</div><div class="name">LCD_DC</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-L">G8</div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#ec4899"></span>
+        <div class="from"><div class="lbl">屏丝印</div><div class="name">LCD_RST</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-L">G9</div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#22c55e"></span>
+        <div class="from"><div class="lbl">屏丝印</div><div class="name">LCD_BL</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-R">G13<span><small>右侧 · V5IN 上面（Wokwi 在左边）</small></span></div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#22d3ee"></span>
+        <div class="from"><div class="lbl">屏丝印</div><div class="name">TP_SDA</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-R">G14</div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#818cf8"></span>
+        <div class="from"><div class="lbl">屏丝印</div><div class="name">TP_SCL</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-R">G21</div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#e5e7eb"></span>
+        <div class="from"><div class="lbl">屏丝印</div><div class="name">TP_IRQ</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-R">G38</div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#9ca3af"></span>
+        <div class="from"><div class="lbl">屏丝印</div><div class="name">TP_RST</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-R">G39</div></div>
+      </div>
+    </section>
+
+    <section class="step">
+      <h2><span class="badge">3</span>INMP441 麦（屏亮了再接）</h2>
+      <div class="wire">
+        <span class="dot" style="background:#e11d48"></span>
+        <div class="from"><div class="lbl">麦</div><div class="name">VDD</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin">3V3</div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#171717"></span>
+        <div class="from"><div class="lbl">麦</div><div class="name">GND + L/R</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin">GND<span><small>L/R 也接地 = 左声道</small></span></div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#4ade80"></span>
+        <div class="from"><div class="lbl">麦</div><div class="name">WS</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-L">G4</div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#86efac"></span>
+        <div class="from"><div class="lbl">麦</div><div class="name">SCK</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-L">G5</div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#16a34a"></span>
+        <div class="from"><div class="lbl">麦</div><div class="name">SD</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-L">G6</div></div>
+      </div>
+    </section>
+
+    <section class="step">
+      <h2><span class="badge">4</span>MAX98357 + 喇叭</h2>
+      <div class="wire">
+        <span class="dot" style="background:#e11d48"></span>
+        <div class="from"><div class="lbl">功放</div><div class="name">VIN + GND</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin">3V3 + GND</div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#f59e0b"></span>
+        <div class="from"><div class="lbl">功放</div><div class="name">BCLK</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-L">G15</div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#d97706"></span>
+        <div class="from"><div class="lbl">功放</div><div class="name">LRC</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-L">G16</div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#ca8a04"></span>
+        <div class="from"><div class="lbl">功放</div><div class="name">DIN</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-L">G7</div></div>
+      </div>
+      <div class="wire">
+        <span class="dot" style="background:#78716c"></span>
+        <div class="from"><div class="lbl">喇叭</div><div class="name">OUT+ / OUT-</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin" style="font-size:18px">喇叭焊盘<span><small>不接 GPIO</small></span></div></div>
+      </div>
+    </section>
+
+    <section class="step warn-box" style="margin-bottom:16px">
+      <h2 style="margin:0 0 10px;font-size:16px"><span class="badge">5</span>4G 最后接</h2>
+      <div class="wire" style="border:none;padding:6px 0">
+        <div class="from"><div class="name">模组 5V、GND</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin" style="font-size:18px">Hub 5V + S3 GND</div></div>
+      </div>
+      <div class="wire" style="border:none;padding:6px 0">
+        <div class="from"><div class="name">模组 TX</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-L">G17<span><small>左侧 · 交叉接线</small></span></div></div>
+      </div>
+      <div class="wire" style="border:none;padding:6px 0">
+        <div class="from"><div class="name">模组 RX</div></div>
+        <span class="arrow">→</span>
+        <div class="to"><div class="pin side-L">G18</div></div>
+      </div>
+      <p class="hint">先 CH340 + Nano 卡打 AT，通了再接到 S3。</p>
+    </section>
+
+    <section class="step no">
+      <h2>先别接</h2>
+      <p class="hint">0.91 OLED · GPIO 40/41/42/47 · 2.0 屏 MISO/SD_CS · 摄像头/GPS/电池 · 微雪 Wiki ESP32 例程脚</p>
+    </section>
+
+    <p class="hint" style="margin-top:20px">完整计划：<a href="bondwatch-board.html">bondwatch-board.html</a></p>
+  </div>
+</body>
+</html>
