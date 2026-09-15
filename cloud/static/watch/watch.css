@@ -68,6 +68,20 @@ html, body {
   z-index: 1;
 }
 .has-3d .elf { display: none; }
+.lumi2d {
+  position: absolute;
+  left: 50%;
+  top: 54%;
+  transform: translate(-50%, -50%);
+  width: 160px;
+  height: 176px;
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 2;
+}
+.has-2d-lumi #elf3d,
+.has-2d-lumi .elf { display: none !important; }
+.screen.off .lumi2d { opacity: 0; }
 .clock, .emo, .sub, .orient-badge { position: relative; z-index: 3; }
 .clock {
   margin: 0;
@@ -291,26 +305,3 @@ html.is-landscape .cam {
 }
 html.is-landscape .emo { font-size: 15px; }
 html.is-landscape .sub { font-size: 12px; min-height: 1.6em; }
-
-@media (orientation: landscape) {
-  .rig {
-    width: 420px;
-    height: 310px;
-    grid-template-columns: 40px 292px 40px;
-    grid-template-rows: 252px auto;
-    transform: scale(min(calc(100vw / 460px), calc((100dvh - 16px) / 330px)));
-  }
-  .bezel { width: 292px; height: 252px; }
-  .screen { width: 280px; height: 240px; padding: 8px 10px 6px; }
-  #elf3d { inset: 0; width: 100%; height: 100%; }
-  .cam {
-    position: fixed;
-    right: 16px;
-    bottom: calc(12px + env(safe-area-inset-bottom));
-    grid-column: auto;
-    margin: 0;
-    z-index: 8;
-  }
-  .emo { font-size: 15px; }
-  .sub { font-size: 12px; min-height: 1.6em; }
-}

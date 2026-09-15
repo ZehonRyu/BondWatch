@@ -29,7 +29,7 @@
 </div>
 <aside class="panel">
   <div class="hit" id="hit">—</div>
-  <p><b>上滑</b>控制　<b>左滑</b>设置　<b>点按</b>应答　<b>下滑</b>返回</p>
+  <p><b>上下滑</b>控制　<b>左右滑</b>设置　<b>点按</b>应答　<b>上下滑</b>返回</p>
   <button type="button" id="btnOrient">切换横/竖屏</button>
   <div class="log" id="log"></div>
 </aside>
@@ -37,7 +37,7 @@
 (() => {
   const cv=document.getElementById("c"), ctx=cv.getContext("2d");
   const sc=document.getElementById("screen");
-  const HINT="上滑控制";
+  const HINT="上下控制 · 左右设置";
   const S={page:"home", dnd:false, bright:1, vol:2, land:false, calStep:0, sub:HINT};
   const VOL=["静音","低","中","高"], BR=["低","中","高"];
   const W=()=>S.land?320:240, H=()=>S.land?240:320;
@@ -58,19 +58,23 @@
   }
   function hitSet(x,y){
     if(S.land){ if(y<40||y>H()-8) return -1; return hitBand(x,8,colW(),3); }
-    return hitBand(y,56,80,3);
+    return hitBand(y,50,78,3);
   }
   function grab(title){
     rr(W()/2-18,8,36,4,2,"#555");
     T(title,16,34,15,"#fff");
+    T("B9", W()-28, 20, 13, "#0ff");
   }
   function drawHome(){
     fill("#000");
     T("08:00", S.land?12:58, S.land?38:48, S.land?28:36, "#fff");
+    T("B9", W()-28, 20, 13, "#0ff");
     if(S.dnd){
       rr(S.land?12:94, S.land?48:56, 48,20,10,"#7810");
       T("勿扰", S.land?20:102, S.land?63:70, 12,"#fff");
     }
+    const calX=S.land?12:W()-56, calY=S.land?74:52;
+    rr(calX,calY,48,22,11,"#0328"); T("校准", calX+10, calY+16, 12,"#8C8");
     if(S.land){
       circ(214,118,72,"#5E9D"); circ(158,70,18,"#5E9D"); circ(270,70,18,"#5E9D");
       circ(192,104,8,"#fff"); circ(236,104,8,"#fff");
@@ -82,7 +86,7 @@
       circ(104,144,8,"#fff"); circ(136,144,8,"#fff");
       circ(98,160,5,"#f8a"); circ(142,160,5,"#f8a");
     }
-    T(S.sub, S.land?12:(W()/2-28), H()-16, 13, "#888");
+    T(S.sub, S.land?12:16, H()-16, 13, "#888");
   }
   function paintCols(items, colors){
     fill("#000"); grab(items.title);
@@ -104,12 +108,13 @@
     });
   }
   function drawSet(){
-    const rows=[["语言","中文"],["屏幕",S.land?"横屏":"竖屏"],["触摸校准","开始"]];
-    if(S.land){ paintCols({title:"设置", rows}, ["#2104","#2104","#2104"]); return; }
+    const rows=[["触摸校准","开始"],["屏幕",S.land?"横屏":"竖屏"],["语言","中文"]];
+    const cols=["#0328","#2104","#2104"];
+    if(S.land){ paintCols({title:"设置", rows}, cols); return; }
     fill("#000"); grab("设置");
     rows.forEach((t,i)=>{
-      const y=56+i*80; rr(10,y,220,68,20,"#2104");
-      T(t[0],24,y+40,16,"#fff"); T(t[1],150,y+40,16,"#888");
+      const y=50+i*78; rr(10,y,220,66,20, cols[i]);
+      T(t[0],24,y+40,16,"#fff"); T(t[1],150,y+40,16, i===0?"#8C8":"#888");
     });
   }
   function calBox(){
@@ -141,15 +146,19 @@
     const up=pos(e.changedTouches?e.changedTouches[0]:e); const dx=up.x-down.x, dy=up.y-down.y; down=null;
     const adx=Math.abs(dx), ady=Math.abs(dy);
     let t="tap";
-    if(adx>80||ady>80){ if(ady>=adx*1.5) t=dy<0?"up":"down"; else if(adx>=ady*1.5) t=dx<0?"left":"right"; }
+    if(adx>40||ady>40){ t=ady>=adx?(dy<0?"up":"down"):(dx<0?"left":"right"); }
     document.getElementById("hit").textContent=`${Math.round(up.x)},${Math.round(up.y)} ${t} ${S.page} ${S.land?"L":"P"}`;
     if(S.page==="home"){
-      if(t==="up"){ S.page="control"; log("控制"); }
-      else if(t==="left"){ S.page="settings"; log("设置"); }
-      else if(t==="tap"){ S.sub="点一下"; setTimeout(()=>{ if(S.page==="home") S.sub=HINT; },800); }
+      if(t==="up"||t==="down"){ S.page="control"; log("控制"); }
+      else if(t==="left"||t==="right"){ S.page="settings"; log("设置"); }
+      else if(t==="tap"){
+        const calX=S.land?12:W()-56, calY=S.land?74:52;
+        if(up.x>=calX&&up.x<=calX+48&&up.y>=calY&&up.y<=calY+22){ S.page="cal"; S.calStep=0; log("校准"); }
+        else { S.sub="点一下"; setTimeout(()=>{ if(S.page==="home") S.sub=HINT; },800); }
+      }
       return;
     }
-    if(t==="down"){ S.page=S.page==="cal"?"settings":"home"; log("返回"); return; }
+    if(t==="down"||t==="up"){ S.page=S.page==="cal"?"settings":"home"; log("返回"); return; }
     if(t!=="tap") return;
     if(S.page==="control"){
       const i=hitCtrl(up.x,up.y);
@@ -158,8 +167,8 @@
     }
     if(S.page==="settings"){
       const i=hitSet(up.x,up.y);
-      if(i===1) setOrient(!S.land);
-      else if(i===2){ S.page="cal"; S.calStep=0; }
+      if(i===0){ S.page="cal"; S.calStep=0; }
+      else if(i===1) setOrient(!S.land);
       return;
     }
     if(S.page==="cal"){

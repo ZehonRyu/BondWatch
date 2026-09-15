@@ -38,7 +38,9 @@ class _WatchPageState extends State<WatchPage> {
               children: [
                 const SizedBox(height: 12),
                 Text(
-                  state.bound ? '假手表 · 已绑定' : '假手表 · 未绑定',
+                  state.bound
+                      ? '已绑定 PAIR ${state.pairCode} · ${state.liveWatch ? (state.faceSource == 'watch' ? '手表画面' : '同步中') : '等手表'}'
+                      : '未绑定',
                   style: const TextStyle(color: Colors.white54, fontSize: 13),
                 ),
                 const SizedBox(height: 16),
@@ -68,6 +70,43 @@ class _WatchPageState extends State<WatchPage> {
                     style: TextStyle(color: Colors.white38, fontSize: 12),
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: FilledButton(
+                      onPressed: () {
+                        if (state.emotion == 'speak') {
+                          state.interrupt();
+                          return;
+                        }
+                        final text = _text.text.trim().isEmpty ? '你好，开始对话' : _text.text.trim();
+                        state.tapTalk(text);
+                      },
+                      child: const Text('开始对话'),
+                    ),
+                  ),
+                ),
+                if (state.audioUrl.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                    child: Material(
+                      color: const Color(0xFF14301F),
+                      borderRadius: BorderRadius.circular(16),
+                      child: ListTile(
+                        title: Text(
+                          state.audioSeconds > 0
+                              ? '手表录音 ${state.audioSeconds.toStringAsFixed(0)} 秒已到'
+                              : '手表录音已到',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: const Text('点这里播放', style: TextStyle(color: Colors.white70)),
+                        trailing: const Icon(Icons.play_circle_fill, color: Color(0xFF3DD68C), size: 36),
+                        onTap: state.openWatchAudio,
+                      ),
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                   child: TextField(
@@ -170,6 +209,11 @@ class _WatchPageState extends State<WatchPage> {
             height: 140,
             child: ElfFace(emotion: state.emotion, skin: Color(style.face)),
           ),
+          if (state.emotion == 'listen')
+            const Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Text('REC 正在听', style: TextStyle(color: Color(0xFFFF6B6B), fontWeight: FontWeight.w700, letterSpacing: 2)),
+            ),
           Text(
             style.label,
             style: const TextStyle(
@@ -178,6 +222,18 @@ class _WatchPageState extends State<WatchPage> {
               fontWeight: FontWeight.w600,
             ),
           ),
+          if (state.emotion == 'listen')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: const LinearProgressIndicator(
+                  minHeight: 10,
+                  color: Color(0xFFFF3D00),
+                  backgroundColor: Color(0xFF222222),
+                ),
+              ),
+            ),
           const SizedBox(height: 4),
           Expanded(
             child: Text(

@@ -14,6 +14,15 @@ services:
       retries: 20
     restart: unless-stopped
 
+  mqtt:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./cloud/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
+
   api:
     build: ./cloud
     ports:
@@ -26,10 +35,19 @@ services:
       PUBLIC_URL: http://192.168.1.63:11111
       WATCH_SIM_PORT: "8001"
       WATCH_SIM_URL: http://192.168.1.63:11112
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      LLM_PROVIDER: ${LLM_PROVIDER:-deepseek}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-flash}
       DEEPSEEK_MAX_TOKENS: ${DEEPSEEK_MAX_TOKENS:-48}
       DEEPSEEK_TIMEOUT: ${DEEPSEEK_TIMEOUT:-8}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-deepseek/deepseek-chat}
+      ALIBABA_API_KEY: ${ALIBABA_API_KEY:-}
+      ALIBABA_MODEL: ${ALIBABA_MODEL:-qwen-plus}
+      ALIBABA_BASE_URL: ${ALIBABA_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+      TTS_VOICE: ${TTS_VOICE:-zh-CN-XiaoxiaoNeural}
       VISION_LOCAL_URL: ${VISION_LOCAL_URL:-http://host.docker.internal:18765/v1/see}
       VISION_API_URL: ${VISION_API_URL:-}
       VISION_API_KEY: ${VISION_API_KEY:-}
@@ -41,6 +59,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      mqtt:
+        condition: service_started
     restart: unless-stopped
 
 volumes:

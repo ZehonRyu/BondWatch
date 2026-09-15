@@ -11,6 +11,7 @@
     if (typeof window.orientation === "number") {
       return Math.abs(window.orientation) === 90;
     }
+    if (!("ontouchstart" in window)) return false;
     const mq = window.matchMedia("(orientation: landscape)").matches;
     const aspect = window.innerWidth > window.innerHeight + 24;
     if (mq || aspect) return true;

@@ -23,6 +23,12 @@ class BondState extends ChangeNotifier {
   bool online = false;
   bool signedIn = false;
   bool bound = false;
+  bool liveWatch = false;
+  String faceSource = '';
+  int faceSeq = 0;
+  int audioSeq = 0;
+  String audioUrl = '';
+  double audioSeconds = 0;
   String displayName = '';
   String pairCode = '';
   bool screenOn = true;
@@ -45,10 +51,16 @@ class BondState extends ChangeNotifier {
   String? apkUrl;
 
   Timer? _ticker;
+  Timer? _facePoll;
 
   Future<void> boot() async {
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tickAlarms());
+    _facePoll?.cancel();
+    _facePoll = Timer.periodic(const Duration(seconds: 1), (_) {
+      _pollFace();
+      _pollAudio();
+    });
     online = await api.health();
     if (!online) {
       emotion = 'offline';
@@ -103,17 +115,95 @@ class BondState extends ChangeNotifier {
       displayName = api.displayName ?? username;
       pairCode = api.pairCode ?? '';
       signedIn = true;
-      await api.bind(code: pairCode, name: 'Flutter 假手表');
+      await api.bind(deviceId: 'watch-esp32-1', code: pairCode, name: 'BondWatch');
+      await api.bind(
+        deviceId: kIsWeb ? 'pc-companion' : 'phone-companion',
+        code: pairCode,
+        name: kIsWeb ? '电脑' : 'Android',
+      );
       bound = true;
       sessionId = await api.openSession(holder: kIsWeb ? 'pc' : 'phone');
       await refreshCloud();
-      emotion = 'idle';
-      subtitle = '已绑定 $pairCode。点屏幕或按对讲';
+      await _pollFace();
+      emotion = liveWatch ? emotion : 'idle';
+      subtitle = liveWatch ? subtitle : '已绑定 $pairCode。点脸说话，手表同步';
     } catch (error) {
       lastError = error.toString();
       signedIn = false;
     }
     notifyListeners();
+  }
+
+  Future<void> joinWithCode(String code) async {
+    lastError = '';
+    notifyListeners();
+    try {
+      api.baseUrl = api.baseUrl;
+      final data = await api.joinPair(
+        code: code,
+        holder: kIsWeb ? 'pc' : 'phone',
+        name: kIsWeb ? '电脑' : 'Android',
+      );
+      displayName = api.displayName ?? 'companion';
+      pairCode = api.pairCode ?? code;
+      signedIn = true;
+      bound = true;
+      sessionId = data['session_id']?.toString() ?? await api.openSession(holder: kIsWeb ? 'pc' : 'phone');
+      try {
+        await api.bind(deviceId: 'watch-esp32-1', code: pairCode, name: 'BondWatch');
+      } catch (_) {}
+      await refreshCloud();
+      await _pollFace();
+      if (!liveWatch) {
+        emotion = 'idle';
+        subtitle = '已绑定 $pairCode。等手表说话';
+      }
+    } catch (error) {
+      lastError = error.toString();
+      signedIn = false;
+    }
+    notifyListeners();
+  }
+
+  Future<void> _pollFace() async {
+    if (api.token == null) return;
+    try {
+      final data = await api.watchFace();
+      final seq = data['seq'] as int? ?? 0;
+      final source = data['source']?.toString() ?? '';
+      final text = data['text']?.toString() ?? '';
+      final emo = data['emotion']?.toString() ?? 'idle';
+      if (seq > 0 && seq != faceSeq && text.isNotEmpty) {
+        faceSeq = seq;
+        faceSource = source;
+        liveWatch = source == 'watch' || source == 'phone' || source == 'pc';
+        emotion = emo;
+        subtitle = text;
+        screenOn = true;
+        notifyListeners();
+      }
+      online = true;
+    } catch (_) {}
+  }
+
+  Future<void> _pollAudio() async {
+    if (api.token == null) return;
+    try {
+      final data = await api.watchAudio();
+      final seq = data['seq'] as int? ?? 0;
+      final url = data['url']?.toString() ?? '';
+      if (seq > 0 && seq != audioSeq && url.isNotEmpty) {
+        audioSeq = seq;
+        audioUrl = api.watchAudioUrl(url);
+        audioSeconds = (data['seconds'] as num?)?.toDouble() ?? 0;
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> openWatchAudio() async {
+    if (audioUrl.isEmpty) return;
+    await launchUrl(Uri.parse(audioUrl), mode: LaunchMode.externalApplication);
   }
 
   Future<void> refreshCloud() async {
@@ -198,6 +288,15 @@ class BondState extends ChangeNotifier {
       final reply = await api.turn(sessionId, text, imageBase64: imageBase64);
       emotion = speakingMuted ? 'silent' : (reply['emotion']?.toString() ?? 'speak');
       subtitle = reply['subtitle']?.toString() ?? reply['text']?.toString() ?? '';
+      faceSource = kIsWeb ? 'pc' : 'phone';
+      try {
+        final face = await api.publishFace(
+          emotion: emotion,
+          text: subtitle,
+          source: faceSource,
+        );
+        faceSeq = face['seq'] as int? ?? faceSeq;
+      } catch (_) {}
       await refreshCloud();
     } catch (error) {
       emotion = 'offline';
@@ -205,7 +304,7 @@ class BondState extends ChangeNotifier {
     }
     notifyListeners();
     await Future<void>.delayed(const Duration(seconds: 2));
-    if (emotion == 'speak' || emotion == 'silent' || emotion == 'quiet') {
+    if (!liveWatch && (emotion == 'speak' || emotion == 'silent' || emotion == 'quiet')) {
       emotion = dnd ? 'silent' : 'idle';
       subtitle = dnd ? '勿扰。字幕仍在。' : '点屏幕或按对讲';
       notifyListeners();
@@ -310,6 +409,7 @@ class BondState extends ChangeNotifier {
   @override
   void dispose() {
     _ticker?.cancel();
+    _facePoll?.cancel();
     super.dispose();
   }
 }

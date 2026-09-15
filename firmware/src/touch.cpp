@@ -5,8 +5,11 @@
 #include <Wire.h>
 
 static const uint8_t CST816_ADDR = 0x15;
-static const uint8_t REG_FINGER = 0x02;
+static const uint8_t REG_GESTURE = 0x01;
 static const uint8_t REG_CHIP_ID = 0xA7;
+static const uint8_t REG_IRQ_CTL = 0xFA;
+static const uint8_t REG_AUTO_SLEEP = 0xF9;
+static const uint8_t REG_DIS_AUTOSLEEP = 0xFE;
 
 static bool i2cOk = false;
 static bool flipX = false;
@@ -29,15 +32,20 @@ static unsigned long suppressUntil = 0;
 static bool longFired = false;
 static bool moved = false;
 static bool debugTouch = false;
+static uint8_t lastChipGest = 0;
+static bool emitGestures = true;
 
 static TouchGesture pending{};
 static bool hasPending = false;
 
-// Finger pads are large; keep swipe threshold high so taps register as taps.
-static const int MOVE_PX = 22;
-static const int SWIPE_PX = 80;
-static const unsigned LONG_MS = 700;
-static const unsigned DOUBLE_MS = 200; // short window; prefer single taps
+// Watch face is small; 40px is a real swipe, below that stays a tap.
+static const int MOVE_PX = 18;
+static const int SWIPE_PX = 44;
+static const unsigned LONG_MS = 750;
+static const unsigned MIN_TAP_MS = 55;
+static const unsigned MAX_TAP_MS = 520;
+static const unsigned TAP_EMIT_GAP_MS = 400;
+static unsigned long lastTapEmitAt = 0;
 
 static const char *gestName(TouchGestureType t) {
   switch (t) {
@@ -58,6 +66,13 @@ static const char *gestName(TouchGestureType t) {
     default:
       return "?";
   }
+}
+
+static bool i2cWrite8(uint8_t reg, uint8_t val) {
+  Wire.beginTransmission(CST816_ADDR);
+  Wire.write(reg);
+  Wire.write(val);
+  return Wire.endTransmission() == 0;
 }
 
 static bool i2cRead(uint8_t reg, uint8_t *buf, size_t len) {
@@ -123,30 +138,93 @@ void touchMapRawToScreen(uint8_t map, int16_t rawX, int16_t rawY, int16_t *sx, i
   applyMap(static_cast<uint8_t>(map & 0x03), rawX, rawY, sx, sy);
 }
 
+// Chip IDs are in native 240x320: 1=up 2=down 3=left 4=right.
+static TouchGestureType mapChipGesture(uint8_t id) {
+  TouchGestureType t = TG_NONE;
+  if (id == 1) {
+    t = TG_SWIPE_UP;
+  } else if (id == 2) {
+    t = TG_SWIPE_DOWN;
+  } else if (id == 3) {
+    t = TG_SWIPE_LEFT;
+  } else if (id == 4) {
+    t = TG_SWIPE_RIGHT;
+  } else {
+    return TG_NONE;
+  }
+  if (flipX) {
+    if (t == TG_SWIPE_LEFT) {
+      t = TG_SWIPE_RIGHT;
+    } else if (t == TG_SWIPE_RIGHT) {
+      t = TG_SWIPE_LEFT;
+    }
+  }
+  if (flipY) {
+    if (t == TG_SWIPE_UP) {
+      t = TG_SWIPE_DOWN;
+    } else if (t == TG_SWIPE_DOWN) {
+      t = TG_SWIPE_UP;
+    }
+  }
+  if (dispRot == 1) {
+    switch (t) {
+      case TG_SWIPE_UP:
+        return TG_SWIPE_LEFT;
+      case TG_SWIPE_DOWN:
+        return TG_SWIPE_RIGHT;
+      case TG_SWIPE_LEFT:
+        return TG_SWIPE_DOWN;
+      case TG_SWIPE_RIGHT:
+        return TG_SWIPE_UP;
+      default:
+        break;
+    }
+  }
+  return t;
+}
+
 static void queueGesture(TouchGestureType type, int16_t x, int16_t y) {
+  if (!emitGestures) {
+    return;
+  }
+  const unsigned long now = millis();
+  if (type == TG_TAP || type == TG_DOUBLE) {
+    if (now - lastTapEmitAt < TAP_EMIT_GAP_MS) {
+      return;
+    }
+    lastTapEmitAt = now;
+    type = TG_TAP;
+  }
   pending.type = type;
   pending.x = x;
   pending.y = y;
   hasPending = true;
-  suppressUntil = millis() + 500;
   Serial.printf("touch %s @%d,%d\n", gestName(type), x, y);
 }
 
 static bool readPoint(int16_t *sx, int16_t *sy, bool *down) {
-  uint8_t buf[6];
-  if (!i2cRead(REG_FINGER, buf, 6)) {
+  uint8_t buf[7];
+  if (!i2cRead(REG_GESTURE, buf, 7)) {
     return false;
   }
-  const uint8_t fingers = buf[0] & 0x0F;
-  const int16_t rawX = static_cast<int16_t>(((buf[1] & 0x0F) << 8) | buf[2]);
-  const int16_t rawY = static_cast<int16_t>(((buf[3] & 0x0F) << 8) | buf[4]);
+  lastChipGest = buf[0];
+  const uint8_t fingerRaw = buf[1];
+  const uint8_t fingers = fingerRaw & 0x0F;
+  const int16_t rawX = static_cast<int16_t>(((buf[2] & 0x0F) << 8) | buf[3]);
+  const int16_t rawY = static_cast<int16_t>(((buf[4] & 0x0F) << 8) | buf[5]);
   lastRawX = rawX;
   lastRawY = rawY;
   mapPoint(rawX, rawY, sx, sy);
-  *down = fingers > 0 && fingers < 3;
+  // 0xFF = CST816 auto-sleep (same meaning as OV-Watch FingerNum).
+  if (fingerRaw == 0xFF) {
+    i2cWrite8(REG_DIS_AUTOSLEEP, 0x01);
+    *down = false;
+  } else {
+    *down = fingers > 0 && fingers < 3;
+  }
   if (debugTouch) {
-    Serial.printf("tp raw=%d,%d map=%d,%d f=%u XY%c%c\n", rawX, rawY, *sx, *sy, fingers,
-                  flipX ? 'X' : '-', flipY ? 'Y' : '-');
+    Serial.printf("tp raw=%d,%d map=%d,%d f=%u g=0x%02X XY%c%c\n", rawX, rawY, *sx, *sy, fingers,
+                  lastChipGest, flipX ? 'X' : '-', flipY ? 'Y' : '-');
   }
   return true;
 }
@@ -155,9 +233,9 @@ void touchBegin() {
   pinMode(PIN_TP_INT, INPUT_PULLUP);
   pinMode(PIN_TP_RST, OUTPUT);
   digitalWrite(PIN_TP_RST, LOW);
-  delay(20);
+  delay(10);
   digitalWrite(PIN_TP_RST, HIGH);
-  delay(80);
+  delay(100);
   Wire.begin(PIN_TP_SDA, PIN_TP_SCL);
   Wire.setClock(400000);
 
@@ -172,6 +250,10 @@ void touchBegin() {
     }
   }
   if (i2cOk) {
+    // Same chip as OV-Watch: poll I2C, do not require INT. Keep it from sleeping.
+    i2cWrite8(REG_DIS_AUTOSLEEP, 0x01);
+    i2cWrite8(REG_AUTO_SLEEP, 0);
+    i2cWrite8(REG_IRQ_CTL, 0x70); // EnTouch | EnChange | EnMotion
     Serial.printf("touch: CST816 ok id=0x%02X  native 240x320\n", id);
   } else {
     Serial.println("touch: INT-only fallback — check TP wiring");
@@ -241,27 +323,33 @@ bool touchSample(int16_t *x, int16_t *y, bool *down) {
   if (!i2cOk) {
     return false;
   }
-  const int irq = digitalRead(PIN_TP_INT);
-  if (irq == HIGH && !fingerDown) {
-    *down = false;
-    return true;
-  }
+  // Always read the chip. INT is optional — OV-Watch also polls I2C.
   return readPoint(x, y, down);
 }
 
-static void finishTap(int16_t x, int16_t y, unsigned long now) {
-  if (now - lastTapAt < DOUBLE_MS) {
-    queueGesture(TG_DOUBLE, x, y);
-    lastTapAt = 0;
-  } else {
-    queueGesture(TG_TAP, x, y);
-    lastTapAt = now;
+void touchPointer(int16_t *x, int16_t *y, bool *down) {
+  if (x) {
+    *x = lastX;
   }
+  if (y) {
+    *y = lastY;
+  }
+  if (down) {
+    *down = fingerDown;
+  }
+}
+
+static void finishTap(int16_t x, int16_t y, unsigned long now) {
+  (void)x;
+  (void)y;
+  lastTapAt = now;
+  queueGesture(TG_TAP, x, y);
 }
 
 static void endFinger(unsigned long now) {
   fingerDown = false;
   if (longFired) {
+    lastChipGest = 0;
     return;
   }
   const int dx = lastX - downX;
@@ -269,27 +357,39 @@ static void endFinger(unsigned long now) {
   const int adx = abs(dx);
   const int ady = abs(dy);
   if (adx > SWIPE_PX || ady > SWIPE_PX) {
-    // Strong axis dominance — sloppy diagonals stay taps, not page switches.
-    if (ady >= (adx * 3) / 2) {
+    if (ady >= adx) {
       queueGesture(dy < 0 ? TG_SWIPE_UP : TG_SWIPE_DOWN, lastX, lastY);
-    } else if (adx >= (ady * 3) / 2) {
+    } else {
       queueGesture(dx < 0 ? TG_SWIPE_LEFT : TG_SWIPE_RIGHT, lastX, lastY);
+    }
+  } else {
+    const unsigned held = now - downAt;
+    if (held < MIN_TAP_MS || held > MAX_TAP_MS) {
+      lastChipGest = 0;
+      return;
+    }
+    const TouchGestureType chip = mapChipGesture(lastChipGest);
+    if (chip != TG_NONE) {
+      queueGesture(chip, lastX, lastY);
     } else {
       finishTap(downX, downY, now);
     }
-  } else {
-    finishTap(downX, downY, now);
   }
+  lastChipGest = 0;
 }
 
 static void pollI2c(unsigned long now) {
-  // CST816D: INT usually active-low while touched; keep polling after contact
-  // even if INT rises early, otherwise release is missed.
+  // CST816 INT is active-low while touched. Also poll without INT — a missing
+  // TP_INT wire used to make the whole panel look dead even when I2C worked.
   const int irq = digitalRead(PIN_TP_INT);
   lastInt = irq;
+  static unsigned long lastIdlePoll = 0;
   if (!fingerDown && irq == HIGH) {
-    return;
+    if (now - lastIdlePoll < 12) {
+      return;
+    }
   }
+  lastIdlePoll = now;
 
   int16_t sx = 0;
   int16_t sy = 0;
@@ -326,6 +426,12 @@ static void pollI2c(unsigned long now) {
     }
   } else if (!down && fingerDown) {
     endFinger(now);
+  } else if (!down && !fingerDown) {
+    const TouchGestureType chip = mapChipGesture(lastChipGest);
+    if (chip != TG_NONE) {
+      queueGesture(chip, sx, sy);
+      lastChipGest = 0;
+    }
   }
 }
 
@@ -343,18 +449,17 @@ static void pollIntOnly(unsigned long now) {
 
 bool touchPollGesture(TouchGesture *out) {
   const unsigned long now = millis();
-  if (touchSuppressed()) {
-    // Drain contact state without emitting gestures during boot settle.
-    if (i2cOk) {
-      pollI2c(now);
-    }
-    hasPending = false;
-    return false;
-  }
+  // Keep sampling during boot suppress so the first real swipe is not lost,
+  // but do not emit those ghost contacts.
+  emitGestures = !touchSuppressed();
   if (i2cOk) {
     pollI2c(now);
   } else {
     pollIntOnly(now);
+  }
+  if (!emitGestures) {
+    hasPending = false;
+    return false;
   }
   if (!hasPending || !out) {
     return false;

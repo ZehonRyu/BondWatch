@@ -28,8 +28,9 @@ const MODULES = [
   ["账号与鉴权", "P0", "POST /v1/auth/login；JWT 或随机 token；所有业务接口校验", "无 token 或过期一律 401。Key 只在环境变量"],
   ["设备绑定", "P0", "POST /v1/devices/bind：校验 device_id + 短码；账号下挂设备", "绑成功后该设备能开会话。Windows 不走绑定向导，但登录后能看到已绑设备"],
   ["会话与持麦", "P0", "POST /v1/sessions；同一时刻只一个 holder；takeover / listen / release", "第二端想说话必须 takeover。管理操作不打断当前 TTS"],
-  ["语音流水线", "P0", "WS /v1/sessions/{id}/audio：上行 PCM 16kHz 单声道（可后加 opus）；ASR → LLM → TTS", "半双工：TTS 播放中忽略新音频，直到客户端发 interrupt"],
-  ["情绪标签", "P0", "下行先 JSON emotion，再音频。枚举固定：think / speak（云端必发）；idle/listen/quiet/silent/alarm/offline 由端上发或本地切", "第一包音频到达前，客户端已经收到 emotion。禁止音频比标签早"],
+  ["语音流水线", "P0", "MQTT：bw/{device_id}/up/audio 上行 PCM 16kHz 单声道；STT → LLM → TTS；dn/meta 先发 emotion，再 dn/audio", "半双工：TTS 播放中忽略新音频，直到 up/ctrl interrupt"],
+  ["情绪标签", "P0", "下行先 JSON emotion，再音频。枚举固定：think / speak（云端必发）；idle/listen/quiet/silent/alarm/offline 由端上 FSM 本地切", "第一包音频到达前，客户端已经收到 emotion。禁止音频比标签早"],
+  ["表情结构化输出", "P1", "/turn 与 dn/meta 扩展 expression（happy/shy/surprised/sad/neutral）+ action（wave/nod/bounce/still/peek）。LLM JSON mode，白名单校验", "说「好开心呀」→ expression=happy, action=wave。旧客户端忽略新字段仍可用"],
   ["长期记忆", "P0", "GET/PUT /v1/memory；与短期对话分开存。每轮把记忆摘要注入 LLM", "写入「我叫小王」后，新会话能叫出小王。三端读到同一份"],
   ["人设", "P0", "系统提示词 + 可编辑人设字段（随 settings 或 memory 的 persona）", "改人设后下一轮回复口吻变化，不需要重启服务"],
   ["闹钟同步", "P0", "GET/PUT /v1/alarms 只存配置（时间、重复、文案）", "云端宕机或断网，端上已同步的闹钟仍响。云端绝不在到点调模型"],
@@ -38,7 +39,7 @@ const MODULES = [
   ["主动开口通道", "P1", "POST /v1/nudges：scene、text 或 generate、target、fire_at（可 delay）", "勿扰返回 423。闹钟响铃不走 nudges"],
   ["预生成缓存句", "P1", "设闹钟或 nudge 时生成一句 TTS/文本，随配置下发到端", "到点播缓存，不现场调模型。没有缓存就只响铃"],
   ["对话设闹钟", "P1", "LLM 把「十分钟后叫我」写成 alarms 记录，同步到各端", "只写配置。到点仍本地响"],
-  ["打断", "P0", "WS 控制帧 interrupt：停 TTS 生成和推流", "从收到 interrupt 到音频流结束 ≤ 200ms"],
+  ["打断", "P0", "up/ctrl interrupt：停 TTS 生成和 MQTT 推流", "从收到 interrupt 到音频流结束 ≤ 200ms"],
   ["字幕文本", "P0", "下行带 transcript（用户）和 reply_text（助手），给小声/勿扰叠字幕", "静音策略在端上；云端只要把字送出去"],
   ["健康检查", "P0", "GET /health；日志打 request_id；token/费用可查", "客户端连不上时能区分：服务挂了 vs 模型超时"],
   ["设备吊销", "P1", "吊销后该 device 不能拉记忆、不能开麦", "9/18 前有则演示，没有就口述"],
@@ -49,7 +50,7 @@ const METRICS = [
   ["接口表落地", "必须", "仓库 README 或 openapi.json 与看板「接口约定」一致，字段名不许私自改", "0 处和看板冲突", "8/21"],
   ["文字一轮", "必须", "登录 → 开会话 → 发一句中文 → 收回复，记忆可写可读", "p95 < 3 s（Wi-Fi，不含冷启动）", "9/02"],
   ["语音一轮", "必须", "用户说完（VAD/松键）到第一包 TTS 音频", "p50 ≤ 1.5 s，p95 ≤ 3 s（假手表 + 家里 Wi-Fi）", "9/02"],
-  ["情绪先于声音", "必须", "WS 事件顺序：emotion=think 或 speak，然后才是 audio 帧", "100% 轮次标签早于音频 ≥ 80 ms", "9/02"],
+  ["情绪先于声音", "必须", "MQTT dn/meta 先带 emotion=think 或 speak，然后才是 dn/audio 帧", "100% 轮次标签早于音频 ≥ 80 ms", "9/02"],
   ["记忆跨会话", "必须", "会话 A 写入偏好，会话 B 回复中用到", "手工 5 条用例全过", "9/02"],
   ["单持麦", "必须", "已有 holder 时第二端开麦被拒，必须走 takeover", "对打 20 次，0 次双持麦", "9/08"],
   ["打断 TTS", "必须", "播放中发 interrupt", "流在 200 ms 内停，不再出新音频包", "9/08"],
@@ -71,7 +72,7 @@ const WEEKS = [
 ];
 
 const HANDOFF = [
-  ["交给客户端", "Base URL、登录示例、WS 帧格式（emotion / audio / text / interrupt）、settings.proactive_enabled、nudges 字段"],
+  ["交给客户端", "Base URL、登录示例、MQTT 主题（up/audio、up/ctrl、dn/meta、dn/audio）、expression+action 字段（P1）、settings.proactive_enabled、nudges 字段"],
   ["向客户端收", "假手表能连；PCM 采样率约定（建议 16 kHz / 16bit / mono）；松键或 VAD 结束帧"],
   ["不收硬件的", "GPIO、接线照片、4G AT。云端只认「有没有网、音频在不在 WS 里」"],
 ];
@@ -135,7 +136,7 @@ export default function BondWatchAiEngineer() {
               ["FastAPI + SQLite 本机先跑", "一上来 Docker/Postgres/Redis"],
               ["云厂商 ASR/LLM/TTS", "自建模型"],
               ["HTTPS/WSS 对外；局域网演示可 HTTP", "把 Key 写进仓库或固件"],
-              ["情绪枚举固定，先标签后音频", "自己发明一套表情 JSON"],
+              ["emotion 枚举固定 + expression/action 白名单", "自由发明动画名或跳过 FSM 本地切 listen/think"],
             ]}
             rowTone={["info", "danger", "warning", "info"]}
           />

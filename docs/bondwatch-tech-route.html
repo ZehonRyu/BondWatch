@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BondWatch · 技术路线</title>
+  <style>
+    :root {
+      --bg: #f0efeb; --fg: #141414; --muted: #5a5a5a; --line: #d4d1c8;
+      --card: #fff; --accent: #1a5cff; --ok: #0d6b4c; --warn: #8a5a00;
+      --warn-bg: #fff8e6; --info-bg: #eaf0ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--fg);
+      font: 15px/1.55 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 80px; }
+    h1 { font-size: 1.75rem; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.02em; }
+    h2 { font-size: 1.15rem; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+    h3 { font-size: 0.95rem; margin: 20px 0 8px; }
+    .sub { color: var(--muted); margin: 0 0 20px; }
+    .callout, .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+      padding: 14px 16px; margin: 0 0 16px;
+    }
+    .callout.info { background: var(--info-bg); border-color: #c5d2f5; }
+    .callout.warn { background: var(--warn-bg); border-color: #e8d59a; }
+    .callout strong { display: block; margin-bottom: 4px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 800px) { .grid2 { grid-template-columns: 1fr; } }
+    table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 13px; margin: 0 0 12px; }
+    th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #f7f6f2; font-weight: 600; }
+    pre, code { font-size: 12px; }
+    pre {
+      background: #1c1c1e; color: #e8e8ed; padding: 14px 16px; border-radius: 10px;
+      overflow-x: auto; line-height: 1.45;
+    }
+    a { color: var(--accent); }
+    .muted { color: var(--muted); font-size: 13px; }
+    ul.tight li { margin: 4px 0; }
+    footer { margin-top: 48px; color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>BondWatch 技术路线</h1>
+    <p class="sub">
+      修订稿 v1.1 · 语音对照
+      <a href="https://www.esp32.ai/zh/guide/getting-started">ESP32.AI / YunDo</a>，
+      表盘对照
+      <a href="https://github.com/No-Chicken/OV-Watch">OV-Watch</a>（STM32 + LVGL，不整包烧入）。
+      关联：<a href="bondwatch-board.html">看板</a> ·
+      <a href="bondwatch-software-design.html">软件与 UI</a> ·
+      <a href="bondwatch-2d-animation.html">2D 表情动画</a> ·
+      <a href="bondwatch-ai-engineer.html">云端交付</a>
+    </p>
+
+    <div class="callout info">
+      <strong>一句话</strong>
+      手表只做眼睛和嘴巴；语音像 YunDo 一样走 <b>MQTT → 识别 → 大模型 → 合成</b>。
+      表盘、触摸、手势继续用已经跑通的 Arduino / PlatformIO，<b>不改成 MicroPython</b>。
+    </div>
+
+    <h2>1. 从 YunDo 学什么、不学什么</h2>
+    <div class="grid2">
+      <div class="card">
+        <h3>学（语音骨架）</h3>
+        <ul class="tight">
+          <li>ESP32 只采集 / 播放声音，不跑大模型</li>
+          <li>音频用 MQTT 传到 Python 服务端</li>
+          <li>服务端拆成：语音转文字 → 大模型 → 文字转语音</li>
+          <li>Broker 用 Mosquitto（本机 Docker）或 EMQX（上线）</li>
+          <li>厂商可替换：YunDo 用 Azure + Dify；我们用国内 API，主题名不变</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>不学（会推倒已有表）</h3>
+        <ul class="tight">
+          <li>不刷 MicroPython / Thonny — 240×320 表盘、CST816 校准、横竖屏已是 C++</li>
+          <li>不绑死 Azure、不强制 Dify 中间层</li>
+          <li>不把表做成「只有喇叭的语音盒子」— BondWatch 还有表盘和控制</li>
+          <li>绑定、记忆、假手表文字回合仍走 FastAPI HTTP</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>1b. 从 OV-Watch 学什么、不学什么</h2>
+    <div class="callout warn">
+      <strong>不能把 OV-Watch 固件直接烧进 BondWatch</strong>
+      那是 <b>STM32F411 + Keil + LVGL 8.2</b> 工程。我们是 <b>ESP32-S3 + PlatformIO</b>。
+      屏和触摸芯片碰巧同类（ST7789 + CST816），所以学的是驱动思路和「页面栈」这种小系统结构，不是拷贝 Keil 工程。
+      OV-Watch 是 <b>GPL-3.0</b>：整页复制他们的 <code>GUI_App</code> 会把本仓库也变成 GPL。只借鉴结构，界面自己写。
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h3>学</h3>
+        <ul class="tight">
+          <li>LVGL + 页面栈 = 腕上「小系统」手感（Home → Menu → App → 返回）</li>
+          <li>CST816：I2C 轮询坐标即可，INT 不是必须；FingerNum=0xFF 表示休眠</li>
+          <li>硬件中间层（他们的 <code>HWDataAccess</code>）：UI 不直接碰引脚，方便 PC 仿真</li>
+          <li>秒表 / 计算器 / 设置列表：作为 BondWatch 自己的页面以后加</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>不搬</h3>
+        <ul class="tight">
+          <li>STM32 HAL、Keil、Bootloader、蓝牙 KT6368A OTA</li>
+          <li>MPU6050 抬腕、心率 EM7028、指南针、气压计、NFC（我们板子没有）</li>
+          <li>他们的 1.69 寸 240×280 LVGL 屏幕资源（我们是 2.0 寸 240×320）</li>
+          <li>不把 BondWatch 改成运动健康表；伴侣 + MQTT 语音仍是主线</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>2. 分层</h2>
+    <pre>手表 Arduino（显示 / 触摸 / 键 / I2S）
+        │  控制面 HTTP：登录、设置、记忆、文字回合
+        │  媒体面 MQTT：上行 PCM，下行 TTS + 情绪
+        ▼
++------------------+     +------------------+
+| FastAPI :11111   |     | Mosquitto :1883  |
+| 账号 / 设备 / 记忆 |     | 语音主题总线      |
++--------+---------+     +--------+---------+
+         |                         |
+         +-----------+-------------+
+                     ▼
+              Python worker
+         STT → LLM → TTS
+         火山 / 阿里 / Azure 可换
+                     │
+                     ▼
+              下行 MQTT：emotion 先到，再音频</pre>
+
+    <h2>3. MQTT 主题（冻结）</h2>
+    <table>
+      <thead><tr><th>主题</th><th>方向</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td><code>bw/{device_id}/up/audio</code></td><td>表 → 云</td><td>PCM 16 kHz / 16-bit / 单声道（以后可改 opus）</td></tr>
+        <tr><td><code>bw/{device_id}/up/ctrl</code></td><td>表 → 云</td><td>JSON：<code>end</code> / <code>interrupt</code> / <code>ping</code></td></tr>
+        <tr><td><code>bw/{device_id}/dn/meta</code></td><td>云 → 表</td><td>JSON：先 <code>emotion=think|speak</code>，再 <code>reply_text</code></td></tr>
+        <tr><td><code>bw/{device_id}/dn/audio</code></td><td>云 → 表</td><td>TTS 音频帧；必须晚于对应 emotion</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">假手表、手机、电脑用同一个 <code>device_id</code> 会话。持麦仍由 FastAPI session 裁定；MQTT 只运音频和表情。</p>
+
+    <h2>4. 两套接口怎么分工</h2>
+    <table>
+      <thead><tr><th>面</th><th>协议</th><th>干什么</th><th>不干什么</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>控制面</td>
+          <td>HTTP FastAPI :11111</td>
+          <td>登录、绑定、设置、记忆、文字 <code>/turn</code>、闹钟配置</td>
+          <td>不传实时麦流</td>
+        </tr>
+        <tr>
+          <td>媒体面</td>
+          <td>MQTT 1883（演示可 9001 WebSocket）</td>
+          <td>采音、放音、打断、情绪包</td>
+          <td>不做人设和记忆存储</td>
+        </tr>
+        <tr>
+          <td>4G</td>
+          <td>Air780E 上 MQTT（Wi‑Fi 不通时）</td>
+          <td>同一套主题</td>
+          <td>不在模组里跑识别</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <strong>为什么不用表直连 WebSocket 音频</strong>
+      YunDo 和 Air780E 都更吃 MQTT：弱网重连、4G 模组原生、主题好调试（MQTTX 冒充手表）。
+      旧方案 <code>WS /v1/sessions/{id}/audio</code> 作废，改走上面四条主题。
+    </div>
+
+    <h2>5. 固件与云怎么落地</h2>
+    <table>
+      <thead><tr><th>阶段</th><th>表</th><th>云</th><th>验收</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>现在 · 表盘壳</td>
+          <td><code>VOICE_FEATURES=0</code>，Arduino UI</td>
+          <td>FastAPI + Postgres 已有；Docker 起 Mosquitto</td>
+          <td>MQTTX 能连 :1883 收发一条</td>
+        </tr>
+        <tr>
+          <td>语音闭环</td>
+          <td>I2S 采播 + MQTT 客户端（仍 C++）</td>
+          <td>worker：STT → DeepSeek → TTS</td>
+          <td>说完到第一包音频 p50 ≤ 1.5 s；表情先于声音</td>
+        </tr>
+        <tr>
+          <td>外出 4G</td>
+          <td>S3 UART 把 MQTT 交给 Air780E，或 S3 自己经 4G 上网</td>
+          <td>同一 Broker</td>
+          <td>断 Wi‑Fi 仍能一轮对话</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>6. 表盘表情：2D 精灵（已拍板）</h2>
+    <div class="callout info">
+      <strong>真表只做 2D，3D 仅作制作工具</strong>
+      ESP32-S3 无 GPU，交付格式是预烘焙 <b>RGB565 精灵帧</b>（160×176，8–12 fps）。
+      可选从 Three.js 烘 GLB，也可用 AI / 手绘直接出 sprite sheet。
+      <b>优先换素材，不轻易改固件。</b>
+    </div>
+    <pre>素材（PNG 序列 / AI 视频抽帧 / 3D 烘焙）
+  → scripts/pack_lumi_frames.py
+  → firmware/src/lumi_frames.rgb565
+  → bw_ui.cpp 按 clip 循环播放
+
+AI 驱动三层：
+  emotion（FSM：listen/think/speak）← 客户端本地
+  expression（happy/shy/…）         ← LLM 结构化输出（规划）
+  action（wave/nod/…）              ← LLM 从有限目录选（规划）</pre>
+    <p class="muted">完整规格、内存预算、AI 工具清单、分阶段路线见 <a href="bondwatch-2d-animation.html">bondwatch-2d-animation.html</a>。</p>
+
+    <h2>7. 环境变量（语音）</h2>
+    <pre>MQTT_HOST=mqtt
+MQTT_PORT=1883
+DEEPSEEK_API_KEY=          # LLM，已有
+# ASR_VENDOR=volc|aliyun|azure
+# TTS_VENDOR=volc|aliyun|azure
+# 对应 Key 只放 .env，不进 Git</pre>
+    <p class="muted">本机：<code>docker compose up --build</code> 后 API 仍是 11111，Broker 是 1883。</p>
+
+    <footer>
+      BondWatch · 技术路线 v1.2 · 2D 精灵已拍板 · 参考 ESP32.AI YunDo<br />
+      源文：<a href="https://www.esp32.ai/zh/guide/getting-started">esp32.ai/zh/guide/getting-started</a>
+    </footer>
+  </div>
+</body>
+</html>

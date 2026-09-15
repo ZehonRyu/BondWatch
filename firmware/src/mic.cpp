@@ -1,5 +1,6 @@
 #include "mic.h"
 #include "pins.h"
+#include "lv_port.h"
 
 #include <Arduino.h>
 #include <driver/i2s.h>
@@ -7,6 +8,11 @@
 
 static bool ready = false;
 static uint16_t lastRms = 0;
+static volatile bool abortRec = false;
+
+void micAbortRequest() { abortRec = true; }
+
+bool micAbortRequested() { return abortRec; }
 
 bool micBegin() {
   if (ready) {
@@ -104,4 +110,57 @@ uint16_t micListenMs(unsigned ms) {
 bool micVoiceDetected(uint16_t threshold) {
   // Always take a fresh short peek — never trust a leftover listen RMS.
   return micListenMs(12) >= threshold;
+}
+
+uint16_t micRecordPcm(int16_t *out, size_t samples, MicProgress progress) {
+  if (!out || samples < 64) {
+    return 0;
+  }
+  if (!ready && !micBegin()) {
+    return 0;
+  }
+  abortRec = false;
+  double acc = 0;
+  double win = 0;
+  size_t winN = 0;
+  size_t got = 0;
+  int32_t buf[64];
+  const unsigned long until = millis() + (samples / 16) + 1500;
+  unsigned long lastCb = 0;
+  while (got < samples && millis() < until) {
+    if (abortRec) {
+      Serial.println("mic: abort");
+      break;
+    }
+    lvPortTick();
+    size_t bytes = 0;
+    if (i2s_read(I2S_NUM_0, buf, sizeof(buf), &bytes, 20) != ESP_OK || bytes == 0) {
+      continue;
+    }
+    const size_t n = bytes / sizeof(int32_t);
+    for (size_t i = 0; i < n && got < samples; i++) {
+      const int16_t s = static_cast<int16_t>(buf[i] >> 16);
+      out[got++] = s;
+      const double sq = static_cast<double>(s) * static_cast<double>(s);
+      acc += sq;
+      win += sq;
+      winN++;
+    }
+    if (progress && winN >= 320 && millis() - lastCb >= 50) {
+      const double chunk = sqrt(win / static_cast<double>(winN));
+      progress(chunk > 65535.0 ? 65535 : static_cast<uint16_t>(chunk), got, samples);
+      win = 0;
+      winN = 0;
+      lastCb = millis();
+    }
+  }
+  if (got == 0) {
+    return 0;
+  }
+  while (got < samples) {
+    out[got++] = 0;
+  }
+  const double rms = sqrt(acc / static_cast<double>(samples));
+  lastRms = rms > 65535.0 ? 65535 : static_cast<uint16_t>(rms);
+  return lastRms;
 }

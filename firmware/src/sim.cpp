@@ -57,9 +57,9 @@ void simPrintHelp() {
   Serial.println("BondWatch  PWR+VOL keys, rest on touch");
   Serial.println("PWR short=screen  double=DND  long=on/off");
   Serial.println("VOL short=volume  long=settings");
-  Serial.println("Touch: tap=ack  swipe up=control  left=settings");
+  Serial.println("Touch: tap=ack  vertical=control  horizontal=settings");
   Serial.println("Serial: t talk  c control  g settings  v volume  r rotate");
-  Serial.println("        i home  w wake  ! screenshot  h help");
+  Serial.println("        t talk  m mic-tx  i home  w wake  ! screenshot  h help");
   Serial.println();
 }
 

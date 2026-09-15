@@ -13,6 +13,7 @@
 #include "prefs.h"
 #include "app.h"
 #include "lang.h"
+#include "lte.h"
 
 enum Phase : uint8_t { PHASE_IDLE, PHASE_LISTEN, PHASE_THINK, PHASE_SPEAK, PHASE_ALARM };
 
@@ -87,19 +88,115 @@ static void enterPhase(Phase next, const char *why);
 
 static unsigned long homeTapAckUntil = 0;
 
+// 0=offline 1=connecting 2=online — debounce home UI on link changes
+static uint8_t lastNetUi = 255;
+
+static uint8_t netUiState() {
+  if (!netWifiOk()) {
+    return 0;
+  }
+  if (!netReady()) {
+    return 1;
+  }
+  return 2;
+}
+
+static void applyIdleHomeUi() {
+  if (prefs().dnd) {
+    uiShow(EMO_SILENT, tr("勿扰已开", "DND on"));
+    return;
+  }
+  switch (netUiState()) {
+    case 0:
+      uiShow(EMO_OFFLINE, tr("没网 · 闹钟仍可用", "Offline · alarms OK"));
+      break;
+    case 1:
+      uiPatchSubtitle(tr("连接中…", "Connecting..."));
+      break;
+    default:
+      uiPatchSubtitle(tr("右滑菜单 · 点按钮", "swipe right · tap"));
+      break;
+  }
+}
+
+static void syncNetUi() {
+  if (!screenOn || appScreen() != APP_HOME || homeTapAckUntil) {
+    return;
+  }
+  if (phase != PHASE_IDLE && phase != PHASE_ALARM) {
+    return;
+  }
+
+  const uint8_t s = netUiState();
+  if (s == lastNetUi) {
+    return;
+  }
+  lastNetUi = s;
+
+  if (phase == PHASE_ALARM) {
+    return;
+  }
+  applyIdleHomeUi();
+}
+
+static void refreshPairBadge() {
+  const char *pc = netPairCode();
+  char pairBuf[20];
+  if (pc[0] && strcmp(pc, "----") != 0) {
+    snprintf(pairBuf, sizeof(pairBuf), "PAIR %s", pc);
+    uiSetPair(pairBuf);
+  } else {
+    uiSetPair("PAIR ----");
+  }
+}
+
+static void onRemoteFace(const char *emotion, const char *text, const char *source) {
+  (void)source;
+  if (!screenOn) {
+    return;
+  }
+  appGoHome();
+  Emotion emo = EMO_SPEAK;
+  if (emotion && !strcmp(emotion, "listen")) emo = EMO_LISTEN;
+  else if (emotion && !strcmp(emotion, "think")) emo = EMO_THINK;
+  else if (emotion && !strcmp(emotion, "silent")) emo = EMO_SILENT;
+  else if (emotion && !strcmp(emotion, "quiet")) emo = EMO_QUIET;
+  else if (emotion && !strcmp(emotion, "alarm")) emo = EMO_ALARM;
+  else if (emotion && !strcmp(emotion, "offline")) emo = EMO_OFFLINE;
+  else if (emotion && !strcmp(emotion, "idle")) emo = EMO_IDLE;
+  uiShow(emo, text && text[0] ? text : "hi");
+  homeTapAckUntil = millis() + 4000;
+}
+
+static unsigned long lastHomeTapAt = 0;
+
 static void onHomeTap() {
   if (!screenOn || appScreen() != APP_HOME) {
     return;
   }
-  uiPatchSubtitle(tr("点一下 · 语音已关", "Tap · voice off"));
-  homeTapAckUntil = millis() + 900;
+  const unsigned long now = millis();
+  if (now - lastHomeTapAt < 500) {
+    return;
+  }
+  lastHomeTapAt = now;
+  uiSetRecord(false, 0, nullptr);
+#if !OFFLINE_USB
+  if (!netWifiOk() || !netCloudUp()) {
+    uiPatchSubtitle(tr("没网 · 滑动仍可用", "Offline · swipes OK"));
+    homeTapAckUntil = millis() + 800;
+    Serial.println("home tap offline");
+    return;
+  }
+#endif
+  uiPatchSubtitle(tr("点一下 · 语音已关", "Hi · I am here"));
+  homeTapAckUntil = millis() + 800;
   Serial.println("home tap ack");
 }
 
 static void startTalk(const char *why) {
 #if !VOICE_FEATURES
   (void)why;
-  onHomeTap();
+  appStartTalk();
   return;
 #else
   if (millis() < talkCooldownUntil) {
@@ -239,11 +336,8 @@ static void enterPhase(Phase next, const char *why) {
       audioListen(false);
       audioSpeak(false);
       micClearLevel();
-      if (prefs().dnd) {
-        uiShow(EMO_SILENT, tr("勿扰已开", "DND on"));
-      } else {
-        uiShow(EMO_IDLE, tr("上滑控制", "swipe up"));
-      }
+      lastNetUi = netUiState();
+      applyIdleHomeUi();
       appNotifyPhaseIdle();
       break;
   }
@@ -430,25 +524,12 @@ static void handleSerial() {
   }
   switch (cmd) {
     case 'm':
-    case 'M': {
-#if VOICE_FEATURES
-      const uint16_t rms = micListenMs(1000);
-      Serial.printf("mic 1s rms=%u\n", rms);
-      char line[32];
-      snprintf(line, sizeof(line), "mic rms=%u", rms);
-      uiShow(EMO_LISTEN, line);
-#else
-      Serial.println("voice disabled");
-#endif
+    case 'M':
+      appRunMicTx();
       break;
-    }
     case 't':
     case 'T':
-#if VOICE_FEATURES
       startTalk("serial talk");
-#else
-      Serial.println("voice disabled");
-#endif
       break;
     case 'u':
     case 'U':
@@ -499,6 +580,15 @@ static void handleSerial() {
       netEnsureSession();
       enterPhase(PHASE_IDLE, "Wi-Fi up");
       break;
+    case 'l':
+    case 'L': {
+      Serial.println("LTE self-test...");
+      LteTestResult r{};
+      lteSelfTest(&r);
+      Serial.printf("LTE RESULT at=%d bytes=%d id=%s sim=%s net=%s csq=%d hint=%s\n", r.atOk ? 1 : 0,
+                    r.gotBytes ? 1 : 0, r.id, r.sim, r.net, r.csq, r.hint);
+      break;
+    }
     case '4':
       simSetLte(!simLteOn());
       enterPhase(PHASE_IDLE, simLteOn() ? "4G up" : "4G down");
@@ -539,14 +629,11 @@ void setup() {
   digitalWrite(PIN_LED, LOW);
 
   prefsBegin();
-#if OFFLINE_USB
   // Low backlight looks like a black crash under room light.
   if (prefs().brightness < BRIGHT_MID) {
     prefs().brightness = BRIGHT_MID;
   }
   prefs().lang = LANG_ZH;
-  prefs().dnd = false;
-#endif
   prefsSave();
   uiBegin();
   uiSetBrightnessLevel(prefs().brightness);
@@ -554,6 +641,7 @@ void setup() {
   prefsApplyTouchMap();
   touchSetRotation(0);
   touchSuppressMs(600);
+  lteBegin();
   simBegin();
   uiSetLandscape(prefs().landscape);
   // Mic stays off — VOICE_FEATURES=0.
@@ -570,21 +658,17 @@ void setup() {
   hooks.phaseBusy = phaseBusy;
   hooks.screenIsOn = screenIsOn;
   appBegin(&hooks);
+  netOnRemoteFace(onRemoteFace);
 
   simPrintHelp();
 
 #if OFFLINE_USB
   simSetWifi(false);
   Serial.println("OFFLINE_USB=1  skip WiFi");
-  enterPhase(PHASE_IDLE, "Hello BondWatch");
 #else
-  uiShow(EMO_THINK, "WiFi...");
-  if (!netBegin()) {
-    enterPhase(PHASE_IDLE, "USB offline");
-  } else {
-    enterPhase(PHASE_IDLE, "Hello, BondWatch");
-  }
+  netBegin();
 #endif
+  enterPhase(PHASE_IDLE, "Hello BondWatch");
 }
 
 void loop() {
@@ -592,9 +676,10 @@ void loop() {
   handlePwr(digitalRead(PIN_PWR) == LOW, now);
   handleVol(digitalRead(PIN_VOL) == LOW, now);
 
-  // Touch first, every loop — SPI/mic work after this made gestures laggy.
+  // Drive CST816 state for LVGL pointer. Do not consume swipes here —
+  // pages handle tap/swipe themselves.
   TouchGesture gest{};
-  while (!touchSuppressed() && touchPollGesture(&gest)) {
+  while (touchPollGesture(&gest)) {
     appHandleGesture(gest);
   }
 
@@ -602,12 +687,18 @@ void loop() {
   handleRot();
   handleSerial();
   appTick(now);
+#if !OFFLINE_USB
+  netTick();
+  uiSetFlags(netWifiOk(), simLteOn(), prefs().dnd);
+  refreshPairBadge();
+  syncNetUi();
+#endif
 
   if (homeTapAckUntil && now >= homeTapAckUntil && screenOn && appScreen() == APP_HOME &&
       phase == PHASE_IDLE) {
     homeTapAckUntil = 0;
     uiPatchSubtitle(prefs().dnd ? tr("勿扰已开", "DND on")
-                                : tr("上滑控制", "swipe up"));
+                                : tr("右滑菜单 · 点按钮", "swipe right · tap"));
   }
 
   const bool touching = touchFingerDown();
@@ -638,7 +729,7 @@ void loop() {
     enterPhase(PHASE_IDLE, "Alarm done");
   }
 
-  if (screenOn && appScreen() == APP_HOME && !touchFingerDown()) {
+  if (screenOn) {
     uiTick();
   }
 

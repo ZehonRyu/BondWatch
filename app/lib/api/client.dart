@@ -67,6 +67,45 @@ class BondApi {
   String? pairCode;
   String? displayName;
 
+  Future<Map<String, dynamic>> joinPair({
+    required String code,
+    String holder = 'phone',
+    String name = 'Android',
+  }) async {
+    final data = await _send('POST', '/v1/pair/join', body: {
+      'code': code.trim(),
+      'holder': holder,
+      'name': name,
+    });
+    token = data['token'] as String?;
+    pairCode = data['pair_code'] as String?;
+    displayName = data['display_name'] as String?;
+    return data;
+  }
+
+  Future<Map<String, dynamic>> watchFace() => _send('GET', '/v1/watch/face');
+
+  Future<Map<String, dynamic>> watchAudio() => _send('GET', '/v1/watch/audio');
+
+  String watchAudioUrl([String? path]) {
+    final rel = (path == null || path.isEmpty) ? '/downloads/watch-last.wav' : path;
+    return '$baseUrl$rel';
+  }
+
+  Future<Map<String, dynamic>> publishFace({
+    required String emotion,
+    required String text,
+    String source = 'phone',
+  }) {
+    return _send('POST', '/v1/watch/face', body: {
+      'device_id': source == 'phone' ? 'phone-companion' : 'pc-companion',
+      'emotion': emotion,
+      'text': text,
+      'source': source,
+      'wifi_ok': true,
+    });
+  }
+
   Future<Map<String, dynamic>> login({
     required String username,
     required String password,

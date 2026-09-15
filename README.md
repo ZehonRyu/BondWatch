@@ -2,6 +2,8 @@
 
 Companion smartwatch: ESP32-S3 firmware on a 240×320 ST7789 face, plus a phone/PC companion later. The watch itself is control, settings, and presence — flashlight and alarm stay on the phone.
 
+**Technical route (voice):** the watch is eyes and mouth only. Audio follows [ESP32.AI / YunDo](https://www.esp32.ai/zh/guide/getting-started): MQTT up PCM, server does STT → LLM → TTS, MQTT down speech + emotion. The face UI stays Arduino / PlatformIO (not MicroPython). Full write-up: [docs/bondwatch-tech-route.html](docs/bondwatch-tech-route.html).
+
 Hardware target: **Goouuu ESP32-S3-N16R8** + **Waveshare 2.0" ST7789** (240×320) + **CST816** touch + **INMP441** mic.
 
 ## Documents
@@ -10,11 +12,13 @@ Open these in a browser (they are static HTML, no server required):
 
 | File | What it is |
 |------|------------|
+| [docs/bondwatch-tech-route.html](docs/bondwatch-tech-route.html) | Technical route (MQTT voice, Arduino face) |
 | [docs/bondwatch-board.html](docs/bondwatch-board.html) | Project board, Gantt, buy list |
 | [docs/bondwatch-wiring.html](docs/bondwatch-wiring.html) | Pin map and physical wiring |
 | [docs/bondwatch-software-design.html](docs/bondwatch-software-design.html) | Software / UI design |
 | [docs/bondwatch-ai-engineer.html](docs/bondwatch-ai-engineer.html) | Cloud AI engineer notes |
 | [docs/bondwatch-sim.html](docs/bondwatch-sim.html) | On-device UI mock (portrait + landscape) |
+| [docs/bondwatch-2d-animation.html](docs/bondwatch-2d-animation.html) | **2D sprite animation** — format, AI pipeline, emotion layers |
 
 Wokwi diagram: `diagram.json` + `wokwi.toml`. Pin source of truth: `firmware/include/pins.h`.
 
@@ -23,7 +27,7 @@ Wokwi diagram: `diagram.json` + `wokwi.toml`. Pin source of truth: `firmware/inc
 ```
 firmware/     ESP32-S3 Arduino / PlatformIO firmware
 docs/         Offline HTML docs + UI sim
-cloud/        Companion API + 3D watch sim (Docker)
+cloud/        Companion API + web watch sim (Docker; 3D preview only)
 app/          Flutter companion (early)
 tools/        Air780E AT loopback helpers (no serial-tool binaries)
 scripts/      Screen capture / APK helpers
@@ -34,9 +38,9 @@ scripts/      Screen capture / APK helpers
 Portrait **240×320** and landscape **320×240** are both first-class.
 
 - Home: large clock + character (full body in portrait, big face in landscape)
-- Swipe **up** → Control (DND / brightness / volume)
-- Swipe **left** → Settings (language / orientation / touch calibration)
-- Swipe **down** → back
+- Vertical swipe → Control (DND / brightness / volume)
+- Horizontal swipe → Settings (language / orientation / touch calibration)
+- Vertical swipe again → back
 - Tap on home → acknowledge (voice is off while `VOICE_FEATURES` is 0)
 
 Touch calibration is a two-point wizard that picks the best X/Y flip map and can self-correct a 180° mismatch.
@@ -58,6 +62,12 @@ Do **not** flash:
 - The CH340 that is wired to the **Air780E AT** board
 
 ESP32 download on this desk has been a **CH340** (`USB VID:PID=1A86:7523`). If upload says “No serial data received”, hold **BOOT**, tap **RESET**, then upload again.
+
+Wiring self-test (LCD / touch I2C / INT / keys / mic). Screen shows PASS/FAIL in English:
+
+```bash
+python -m platformio run -e diag -t upload --upload-port COMx
+```
 
 ## Air780E AT (4G module, separate from the watch)
 
@@ -81,7 +91,8 @@ docker compose up --build
 ```
 
 - API: port **11111**
-- 3D watch sim: port **11112**
+- Web watch sim: port **11112** (3D preview in browser; device uses baked 2D sprites)
+- MQTT broker: port **1883** (WebSocket **9001** for MQTTX in a browser)
 
 ## Secrets
 

@@ -5,10 +5,14 @@
 #include "lang.h"
 #include "secrets.h"
 #include "touch.h"
+#include "lv_port.h"
+#include "bw_ui.h"
+#include "net.h"
 
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
@@ -142,17 +146,69 @@ static uint16_t lighten(uint16_t c, uint8_t n) {
   return static_cast<uint16_t>((r << 11) | (g << 5) | b);
 }
 
-static void nowClock(char *buf, size_t n) {
+bool uiTimeSynced() {
+  return time(nullptr) > 1700000000;
+}
+
+void uiFillClock(char *buf, size_t n) {
+  time_t now = time(nullptr);
+  struct tm t;
+  if (now > 1700000000 && localtime_r(&now, &t)) {
+    snprintf(buf, n, "%02d:%02d", t.tm_hour, t.tm_min);
+    return;
+  }
   const unsigned long sec = millis() / 1000UL;
   const int hh = static_cast<int>((8 + sec / 3600UL) % 24);
   const int mm = static_cast<int>((sec / 60UL) % 60);
   snprintf(buf, n, "%02d:%02d", hh, mm);
 }
 
-static void sheetChrome(const char *title) {
-  const int16_t w = gfx->width();
-  gfx->fillRoundRect(w / 2 - 18, 8, 36, 4, 2, 0x4A49);
-  uiText(16, 20, title, 0xFFFF, 0x0000, true);
+static void nowClock(char *buf, size_t n) {
+  uiFillClock(buf, n);
+}
+
+static void drawVersion(uint16_t bg) {
+  const int16_t tw = textW(BW_VERSION);
+  const int16_t x = static_cast<int16_t>(gfx->width() - tw - 8);
+  uiText(x, 6, BW_VERSION, 0x07FF, bg, false);
+}
+
+static void homeCalBox(int16_t *x, int16_t *y, int16_t *w, int16_t *h) {
+  const char *lab = tr("校准", "Cal");
+  const int16_t tw = textW(lab);
+  const int16_t pw = static_cast<int16_t>(tw + 16);
+  if (landscape) {
+    *x = 12;
+    *y = 74;
+    *w = pw;
+    *h = 24;
+  } else {
+    *x = static_cast<int16_t>(gfx->width() - pw - 8);
+    *y = 52;
+    *w = pw;
+    *h = 24;
+  }
+}
+
+static void drawHomeCalChip() {
+  int16_t x = 0, y = 0, w = 0, h = 0;
+  homeCalBox(&x, &y, &w, &h);
+  gfx->fillRoundRect(x, y, w, h, 12, 0x0328);
+  uiText(static_cast<int16_t>(x + 8), static_cast<int16_t>(y + 5), tr("校准", "Cal"), 0x07E8, 0x0328, false);
+}
+
+bool uiHitHomeCal(int16_t px, int16_t py) {
+  int16_t x = 0, y = 0, w = 0, h = 0;
+  homeCalBox(&x, &y, &w, &h);
+  return px >= x && px <= static_cast<int16_t>(x + w) && py >= y && py <= static_cast<int16_t>(y + h);
+}
+
+bool uiHitTalk(int16_t x, int16_t y) {
+#ifdef BW_USE_LVGL
+  return bwUiHitTalk(x, y);
+#else
+  return x >= 16 && x <= 224 && y >= 262 && y <= 318;
+#endif
 }
 
 static void iconMoon(int16_t cx, int16_t cy, uint16_t fg, uint16_t bg) {
@@ -205,12 +261,14 @@ static void printClock() {
   if (landscape) {
     gfx->fillRect(8, 4, 124, 40, lastBg);
     uiClock(12, 6, clock, 0xFFFF, lastBg, u8g2_font_logisoso32_tn, 32);
+    drawVersion(lastBg);
   } else {
     u8f.setFont(u8g2_font_logisoso42_tn);
     const int16_t cw = static_cast<int16_t>(u8f.getUTF8Width(clock));
     const int16_t x = static_cast<int16_t>((gfx->width() - cw) / 2);
     gfx->fillRect(0, 4, gfx->width(), 48, lastBg);
     uiClock(x, 8, clock, 0xFFFF, lastBg, u8g2_font_logisoso42_tn, 42);
+    drawVersion(lastBg);
   }
 }
 
@@ -241,6 +299,7 @@ static void printHud() {
       drawDndPill(static_cast<int16_t>((gfx->width() - (tw + 16)) / 2), 52);
     }
   }
+  drawHomeCalChip();
 }
 
 static void printFooter() {
@@ -456,6 +515,12 @@ void uiBegin() {
   u8f.begin(*gfx);
   u8f.setFontMode(0);
   u8f.setFontDirection(0);
+#ifdef BW_USE_LVGL
+  landscape = false;
+  tft.setRotation(0);
+  lvPortBegin(&tft);
+  bwUiStart();
+#endif
 }
 
 void uiSetBacklight(bool on) {
@@ -469,9 +534,16 @@ void uiSetBrightnessLevel(uint8_t level) {
 }
 
 void uiSetLandscape(bool on) {
+#ifdef BW_USE_LVGL
+  (void)on;
+  landscape = false;
+  tft.setRotation(0);
+  touchSetRotation(0);
+#else
   landscape = on;
   tft.setRotation(on ? 1 : 0);
   touchSetRotation(on ? 1 : 0);
+#endif
 }
 
 bool uiLandscape() {
@@ -488,9 +560,35 @@ float uiMicSmooth() {
   return micSmooth;
 }
 
+void uiSetRecord(bool on, uint8_t level, const char *status) {
+#ifdef BW_USE_LVGL
+  bwUiSetRecord(on, level, status);
+#else
+  (void)on;
+  (void)level;
+  (void)status;
+#endif
+}
+
+void uiPatchRecLevel(uint8_t level) {
+#ifdef BW_USE_LVGL
+  bwUiPatchRecLevel(level);
+#else
+  (void)level;
+#endif
+}
+
 void uiSetHint(const char *hint) {
   strncpy(hintLine, hint ? hint : "", sizeof(hintLine) - 1);
   hintLine[sizeof(hintLine) - 1] = 0;
+}
+
+void uiSetPair(const char *line) {
+#ifdef BW_USE_LVGL
+  bwUiSetPair(line);
+#else
+  (void)line;
+#endif
 }
 
 void uiSetAlarmBadge(const char *badge) {
@@ -520,6 +618,17 @@ void uiSetMicLevel(uint16_t rms) {
   }
   micSmooth = 0.55f * micSmooth + 0.45f * static_cast<float>(rms);
 
+#ifdef BW_USE_LVGL
+  uint8_t level = 0;
+  if (micSmooth > 40.0f) {
+    const float n = (micSmooth - 40.0f) / 3600.0f;
+    level = n >= 1.0f ? 100 : static_cast<uint8_t>(n * 100.0f);
+  }
+  if (lastEmotion == EMO_LISTEN) {
+    bwUiPatchRecLevel(level);
+  }
+  return;
+#else
   // Only redraw when visible bar width changes — RMS noise was flashing the strip.
   const int16_t barInner = gfx->width() - 42;
   const int16_t fill = micNormFill(barInner > 2 ? barInner - 2 : 1);
@@ -527,10 +636,15 @@ void uiSetMicLevel(uint16_t rms) {
     return;
   }
   drawMicMeter();
+#endif
 }
 
 void uiBlank() {
+#ifdef BW_USE_LVGL
+  tft.fillScreen(0x0000);
+#else
   gfx->fillScreen(0x0000);
+#endif
 }
 
 int16_t uiWidth() {
@@ -541,12 +655,82 @@ int16_t uiHeight() {
   return gfx->height();
 }
 
+void uiResumeHome() {
+#ifdef BW_USE_LVGL
+  bwUiShowHome(lastLine[0] ? lastLine : tr("右滑菜单 · 点按钮", "swipe right · tap"), 0);
+#endif
+}
+
 void uiShow(Emotion emotion, const char *subtitle) {
   const Face face = faceOf(emotion);
   lastEmotion = emotion;
   lastBg = face.bg;
   strncpy(lastLine, subtitle ? subtitle : "", sizeof(lastLine) - 1);
   lastLine[sizeof(lastLine) - 1] = 0;
+#ifdef BW_USE_LVGL
+  uint32_t hex = 0x5E9D9A;
+  switch (emotion) {
+    case EMO_LISTEN:
+      hex = 0xE53935;
+      break;
+    case EMO_THINK:
+      hex = 0x9C27B0;
+      break;
+    case EMO_SPEAK:
+      hex = 0xFF9800;
+      break;
+    case EMO_SILENT:
+    case EMO_QUIET:
+      hex = 0x555555;
+      break;
+    case EMO_ALARM:
+      hex = 0xF44336;
+      break;
+    case EMO_OFFLINE:
+      hex = 0x607D8B;
+      break;
+    default:
+      hex = 0x5E9D9A;
+      break;
+  }
+  if (emotion == EMO_LISTEN) {
+    bwUiSetRecord(true, 0, subtitle);
+  } else {
+    bwUiSetRecord(false, 0, nullptr);
+  }
+  bwUiShowHome(subtitle, hex);
+  {
+    const char *name = "idle";
+    switch (emotion) {
+      case EMO_LISTEN:
+        name = "listen";
+        break;
+      case EMO_THINK:
+        name = "think";
+        break;
+      case EMO_SPEAK:
+        name = "speak";
+        break;
+      case EMO_SILENT:
+        name = "silent";
+        break;
+      case EMO_QUIET:
+        name = "quiet";
+        break;
+      case EMO_ALARM:
+        name = "alarm";
+        break;
+      case EMO_OFFLINE:
+        name = "offline";
+        break;
+      default:
+        break;
+    }
+    if (netCloudUp()) {
+      netPublishFace(name, lastLine);
+    }
+  }
+#else
   micFillDrawn = -1;
   gfx->fillScreen(face.bg);
   printHud();
@@ -560,9 +744,20 @@ void uiShow(Emotion emotion, const char *subtitle) {
     drawPortrait(face, false, talk, 10, 4, 0);
   }
   printFooterFresh();
+#endif
+}
+
+void uiFlush() {
+#ifdef BW_USE_LVGL
+  bwUiFlush();
+#endif
 }
 
 void uiTick() {
+#ifdef BW_USE_LVGL
+  bwUiTick();
+  return;
+#endif
   // Home must stay visually static. Only patch the clock when the minute changes,
   // and the alarm badge when its text changes — never wipe footer/character.
   static int lastMm = -1;
@@ -595,6 +790,13 @@ void uiTick() {
 #endif
 }
 
+static void sheetChrome(const char *title) {
+  const int16_t w = gfx->width();
+  gfx->fillRoundRect(w / 2 - 18, 8, 36, 4, 2, 0x4A49);
+  uiText(16, 20, title, 0xFFFF, 0x0000, true);
+  drawVersion(0x0000);
+}
+
 static void pageTitle(const char *title) {
   sheetChrome(title);
 }
@@ -613,20 +815,24 @@ static void drawSettingsList(uint8_t scroll, uint8_t selected, bool offline, con
   (void)touchMode;
   const uint16_t card = 0x2104;
   const uint16_t cardSel = 0x39C7;
-  const char *labels[] = {tr("语言", "Language"), tr("屏幕", "Screen"), tr("触摸校准", "Touch cal")};
-  const char *values[] = {prefsLangName(), prefs().landscape ? tr("横屏", "Land") : tr("竖屏", "Port"),
-                          tr("开始", "Start")};
+  const char *labels[] = {tr("触摸校准", "Touch cal"), tr("屏幕", "Screen"), tr("语言", "Language")};
+  const char *values[] = {tr("开始", "Start"), prefs().landscape ? tr("横屏", "Land") : tr("竖屏", "Port"),
+                          prefsLangName()};
   if (landscape) {
     gfx->fillRect(0, 36, gfx->width(), gfx->height() - 36, 0x0000);
     const int16_t cw = landColW();
     const int16_t ch = gfx->height() - 52;
     for (int i = 0; i < UI_SET_N; i++) {
       const int16_t x = landColX(i);
-      const uint16_t fill = (i == selected) ? cardSel : card;
+      uint16_t fill = (i == selected) ? cardSel : card;
+      if (i == 0) {
+        fill = (i == selected) ? static_cast<uint16_t>(0x0540) : static_cast<uint16_t>(0x0328);
+      }
       gfx->fillRoundRect(x, UI_LAND_TILE_Y, cw - 8, ch, 20, fill);
       uiText(x + 12, 70, labels[i], 0xFFFF, fill, true);
       if (values[i][0]) {
-        uiText(x + 12, 108, values[i], 0x8C71, fill, true);
+        uiText(x + 12, 108, values[i], i == 0 ? static_cast<uint16_t>(0x07E8) : static_cast<uint16_t>(0x8C71), fill,
+               true);
       }
     }
     return;
@@ -634,23 +840,71 @@ static void drawSettingsList(uint8_t scroll, uint8_t selected, bool offline, con
   gfx->fillRect(0, UI_SET_TOP - 4, gfx->width(), UI_SET_N * UI_SET_ROW + 8, 0x0000);
   for (int i = 0; i < UI_SET_N; i++) {
     const int16_t y = UI_SET_TOP + i * UI_SET_ROW;
-    const uint16_t fill = (i == selected) ? cardSel : card;
+    uint16_t fill = (i == selected) ? cardSel : card;
+    if (i == 0) {
+      fill = (i == selected) ? static_cast<uint16_t>(0x0540) : static_cast<uint16_t>(0x0328);
+    }
     gfx->fillRoundRect(10, y, gfx->width() - 20, UI_SET_ROW - 12, 20, fill);
     uiText(24, y + 24, labels[i], 0xFFFF, fill, true);
     if (values[i][0]) {
       const int16_t vw = textW(values[i]);
-      uiText(static_cast<int16_t>(gfx->width() - 24 - vw), y + 24, values[i], 0x8C71, fill, true);
+      uiText(static_cast<int16_t>(gfx->width() - 24 - vw), y + 24, values[i],
+             i == 0 ? static_cast<uint16_t>(0x07E8) : static_cast<uint16_t>(0x8C71), fill, true);
     }
   }
 }
 
+void uiDrawMenu() {
+#ifdef BW_USE_LVGL
+  bwUiShowMenu();
+#else
+  (void)0;
+#endif
+}
+
+void uiDrawLteTest() {
+#ifdef BW_USE_LVGL
+  bwUiShowLte();
+#endif
+}
+
+void uiPatchLteTest(const char *status, const char *id, const char *sim, const char *csq, const char *hint,
+                    uint32_t statusColor) {
+#ifdef BW_USE_LVGL
+  bwUiPatchLte(status, id, sim, csq, hint, statusColor);
+#else
+  (void)status;
+  (void)id;
+  (void)sim;
+  (void)csq;
+  (void)hint;
+  (void)statusColor;
+#endif
+}
+
 void uiDrawSettings(uint8_t scroll, uint8_t selected, bool offline, const char *touchMode) {
+#ifdef BW_USE_LVGL
+  (void)scroll;
+  (void)selected;
+  (void)offline;
+  (void)touchMode;
+  bwUiShowSettings();
+  return;
+#endif
   gfx->fillScreen(0x0000);
   pageTitle(tr("设置", "Settings"));
   drawSettingsList(scroll, selected, offline, touchMode);
 }
 
 void uiPatchSettings(uint8_t scroll, uint8_t selected, bool offline, const char *touchMode) {
+#ifdef BW_USE_LVGL
+  (void)scroll;
+  (void)selected;
+  (void)offline;
+  bwUiPatchSettings(prefs().landscape ? tr("横屏", "Land") : tr("竖屏", "Port"), prefsLangName(),
+                    touchMode);
+  return;
+#endif
   drawSettingsList(scroll, selected, offline, touchMode);
 }
 
@@ -703,6 +957,13 @@ static void paintControlRows(uint8_t volume, uint8_t brightness, bool dnd) {
 }
 
 void uiDrawControl(uint8_t volume, uint8_t brightness, bool dnd) {
+#ifdef BW_USE_LVGL
+  (void)volume;
+  (void)brightness;
+  (void)dnd;
+  bwUiShowControl();
+  return;
+#endif
   gfx->fillScreen(0x0000);
   pageTitle(tr("控制", "Control"));
   paintControlRows(volume, brightness, dnd);
@@ -798,12 +1059,20 @@ bool uiCalInBlue(int16_t x, int16_t y) {
 }
 
 void uiPatchControl(uint8_t volume, uint8_t brightness, bool dnd) {
+#ifdef BW_USE_LVGL
+  bwUiPatchControl(volume, brightness, dnd);
+  return;
+#endif
   paintControlRows(volume, brightness, dnd);
 }
 
 void uiPatchSubtitle(const char *subtitle) {
   strncpy(lastLine, subtitle ? subtitle : "", sizeof(lastLine) - 1);
   lastLine[sizeof(lastLine) - 1] = 0;
+#ifdef BW_USE_LVGL
+  bwUiSetSubtitle(subtitle);
+  return;
+#endif
   printFooterFresh();
 }
 
@@ -822,6 +1091,11 @@ static void drawCalDots(uint8_t step) {
 }
 
 void uiDrawTouchCal(uint8_t step, int16_t x, int16_t y, bool down, const char *mapName) {
+#ifdef BW_USE_LVGL
+  bwUiShowCal();
+  bwUiPatchCal(step, x, y, down, mapName);
+  return;
+#endif
   (void)mapName;
   static uint8_t drawnStep = 0xFF;
   static int16_t lastX = -999;
@@ -839,6 +1113,7 @@ void uiDrawTouchCal(uint8_t step, int16_t x, int16_t y, bool down, const char *m
     gfx->fillScreen(bg);
     gfx->fillRoundRect(gfx->width() / 2 - 18, 8, 36, 4, 2, 0x4A49);
     uiText(16, 18, tr("触摸校准", "Touch cal"), 0xFFFF, bg, true);
+    drawVersion(bg);
     drawCalDots(step);
     if (step == 0) {
       uiText(16, 40, tr("点左上角准星", "Tap top-left"), 0x8C71, bg, false);
@@ -911,7 +1186,7 @@ void uiScreenshotToSerial() {
 
   // Redraw current UI into RAM canvas (does not touch the physical LCD).
   if (appScreen() == APP_HOME) {
-    uiShow(lastEmotion, lastLine[0] ? lastLine : tr("上滑控制", "swipe up"));
+    uiShow(lastEmotion, lastLine[0] ? lastLine : tr("右滑菜单 · 点按钮", "swipe right · tap"));
   } else {
     appRedraw();
   }
@@ -943,7 +1218,7 @@ void uiScreenshotToSerial() {
   delete shotCanvas;
   shotCanvas = nullptr;
   if (appScreen() == APP_HOME) {
-    uiShow(lastEmotion, lastLine[0] ? lastLine : tr("上滑控制", "swipe up"));
+    uiShow(lastEmotion, lastLine[0] ? lastLine : tr("右滑菜单 · 点按钮", "swipe right · tap"));
   } else {
     appRedraw();
   }

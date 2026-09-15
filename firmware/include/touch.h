@@ -34,6 +34,8 @@ void touchLastRaw(int16_t *rawX, int16_t *rawY); // last CST816 sample, before f
 void touchLastDownRaw(int16_t *rawX, int16_t *rawY); // raw at finger-down (for cal)
 // Live sample for calibration UI (works while finger down).
 bool touchSample(int16_t *x, int16_t *y, bool *down);
+// Last mapped pointer from the I2C poll (no extra bus read). For LVGL indev.
+void touchPointer(int16_t *x, int16_t *y, bool *down);
 // Non-blocking: returns true when a gesture is ready.
 bool touchPollGesture(TouchGesture *out);
 // Compat: true on a completed single tap (or INT-only tap).

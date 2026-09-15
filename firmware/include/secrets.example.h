@@ -13,3 +13,6 @@
 #define API_USER "demo"
 #define API_PASS "demo123"
 #define DEVICE_ID "watch-esp32-1"
+// Voice media plane (YunDo-style). Unused while VOICE_FEATURES=0.
+#define MQTT_HOST "192.168.1.10"
+#define MQTT_PORT 1883

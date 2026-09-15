@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BondWatch · 2D 表情动画方案</title>
+  <style>
+    :root {
+      --bg: #f0efeb; --fg: #141414; --muted: #5a5a5a; --line: #d4d1c8;
+      --card: #fff; --accent: #1a5cff; --ok: #0d6b4c; --warn: #8a5a00;
+      --warn-bg: #fff8e6; --info-bg: #eaf0ff; --phase1: #1a5cff; --phase2: #0d6b4c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--fg);
+      font: 15px/1.55 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 80px; }
+    h1 { font-size: 1.75rem; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.02em; }
+    h2 { font-size: 1.15rem; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+    h3 { font-size: 0.95rem; margin: 20px 0 8px; }
+    .sub { color: var(--muted); margin: 0 0 20px; }
+    .callout, .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+      padding: 14px 16px; margin: 0 0 16px;
+    }
+    .callout.info { background: var(--info-bg); border-color: #c5d2f5; }
+    .callout.warn { background: var(--warn-bg); border-color: #e8d59a; }
+    .callout.ok { background: #e6f5ef; border-color: #a8d5c0; }
+    .callout strong { display: block; margin-bottom: 4px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    @media (max-width: 800px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+    table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 13px; margin: 0 0 12px; }
+    th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #f7f6f2; font-weight: 600; }
+    pre, code { font-size: 12px; }
+    pre {
+      background: #1c1c1e; color: #e8e8ed; padding: 14px 16px; border-radius: 10px;
+      overflow-x: auto; line-height: 1.45;
+    }
+    a { color: var(--accent); }
+    .muted { color: var(--muted); font-size: 13px; }
+    ul.tight li { margin: 4px 0; }
+    .tag {
+      display: inline-block; font-size: 11px; font-weight: 600;
+      padding: 1px 7px; border-radius: 999px; margin-right: 4px;
+    }
+    .t-done { background: #e6f5ef; color: var(--ok); }
+    .t-next { background: #e8efff; color: var(--phase1); }
+    .t-plan { background: #eee; color: #555; }
+    footer { margin-top: 48px; color: var(--muted); font-size: 12px; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .toc li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>BondWatch 2D 表情动画方案</h1>
+    <p class="sub">
+      修订稿 v1.0 · 2026-09-14 ·
+      关联：<a href="bondwatch-tech-route.html">技术路线</a> ·
+      <a href="bondwatch-software-design.html">软件与 UI</a> ·
+      <a href="bondwatch-ai-engineer.html">云端 AI</a> ·
+      <a href="bondwatch-board.html">看板</a>
+    </p>
+
+    <div class="callout ok">
+      <strong>已拍板：真表只做 2D 精灵动画</strong>
+      ESP32-S3 + ST7789 没有 3D GPU，也不跑 WebGL / Three.js。
+      3D 仅用于<strong>内容制作</strong>（网页预览、可选烘焙源），交付到手表的永远是预烘焙 RGB565 帧序列。
+      <b>优先换素材，不轻易改固件</b>；固件只在需要「多 clip 切换」时做最小增量。
+    </div>
+
+    <div class="card toc">
+      <h3 style="margin-top:0">目录</h3>
+      <ol class="tight">
+        <li><a href="#progress">当前进度</a></li>
+        <li><a href="#why">为什么 2D</a></li>
+        <li><a href="#layers">三层模型：状态 / 表情 / 动作</a></li>
+        <li><a href="#format">素材规格与内存预算</a></li>
+        <li><a href="#pipeline">素材管线（含 AI 工具）</a></li>
+        <li><a href="#ai">AI 怎么驱动表情</a></li>
+        <li><a href="#firmware">固件侧（最小改动原则）</a></li>
+        <li><a href="#roadmap">分阶段路线</a></li>
+        <li><a href="#files">仓库文件索引</a></li>
+      </ol>
+    </div>
+
+    <h2 id="progress">1. 当前进度</h2>
+    <table>
+      <thead><tr><th>模块</th><th>状态</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>固件 UI 框架</td>
+          <td><span class="tag t-done">已完成</span></td>
+          <td>LVGL 8.3 页面栈（Home / 控制 / 设置 / 校准 / LTE 测试），<code>BW_USE_LVGL=1</code></td>
+        </tr>
+        <tr>
+          <td>Lumi 精灵帧</td>
+          <td><span class="tag t-done">已完成</span></td>
+          <td>12 帧 × 160×176 RGB565，约 675 KB；<code>bw_ui.cpp</code> 每 90 ms 循环播放 idle wave</td>
+        </tr>
+        <tr>
+          <td>3D → 2D 烘焙链</td>
+          <td><span class="tag t-done">已完成</span></td>
+          <td><code>bake.js</code> 渲染 GLB → PNG → <code>pack_lumi_frames.py</code> → <code>lumi_frames.rgb565</code></td>
+        </tr>
+        <tr>
+          <td>Web 3D 预览</td>
+          <td><span class="tag t-done">已完成</span></td>
+          <td><code>:11112</code> Three.js <code>elf3d.js</code>，8 种 emotion 骨骼 pose；仅浏览器，不进固件</td>
+        </tr>
+        <tr>
+          <td>emotion → 动画 clip</td>
+          <td><span class="tag t-next">下一步</span></td>
+          <td>固件目前<strong>所有 emotion 共用同一套 wave</strong>，只改字幕/背景；需多 clip + 切换逻辑</td>
+        </tr>
+        <tr>
+          <td>AI 结构化表情</td>
+          <td><span class="tag t-plan">规划中</span></td>
+          <td><code>pick_emotion()</code> 仅按回复长度判 quiet/speak；待扩展 expression + action 字段</td>
+        </tr>
+        <tr>
+          <td>MQTT 语音 + TTS 嘴型</td>
+          <td><span class="tag t-plan">规划中</span></td>
+          <td>Broker 已起，worker 未接；speak 阶段嘴型可跟 TTS RMS 同步</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="why">2. 为什么 2D（不是失败，是正确选择）</h2>
+    <div class="grid2">
+      <div class="card">
+        <h3>硬件现实</h3>
+        <ul class="tight">
+          <li>240×320 SPI LCD，无 GPU</li>
+          <li>PSRAM 约 8 MB，WiFi/LVGL/栈还要占</li>
+          <li>实时骨骼网格渲染不可行</li>
+          <li>Lottie（Rlottie）在 <code>lv_conf.h</code> 里已关闭</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>2D 精灵的优势</h3>
+        <ul class="tight">
+          <li>帧率稳定、功耗可预测</li>
+          <li>换素材 = 换脸，不必动核心逻辑</li>
+          <li>可用 AI / 3D 工具<strong>离线</strong>生产，表上只播放</li>
+          <li>业界 MCU 表、Tamagotchi 类设备均走此路</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout info">
+      <strong>3D 的角色</strong>
+      保留为<strong>可选制作工具</strong>：在浏览器里调 pose、预览横竖屏，再烘焙成 2D 帧。
+      也可以完全不用 3D，直接用 AI 或手绘工具出 sprite sheet。
+    </div>
+
+    <h2 id="layers">3. 三层模型：状态 / 表情 / 动作</h2>
+    <p>不要把「交互状态」和「视觉表情」混成一个字段。</p>
+    <pre>Layer 1 · 交互状态 (emotion)     ← 设备/客户端 FSM 驱动，LLM 不参与
+  idle → listen → think → speak → idle
+
+Layer 2 · 表情 (expression)       ← LLM 在 speak 阶段决定
+  neutral / happy / shy / surprised / sad
+
+Layer 3 · 动作 (action)           ← LLM 从有限目录里选
+  wave / nod / bounce / still / peek …</pre>
+    <table>
+      <thead><tr><th>层</th><th>谁决定</th><th>何时切换</th><th>例</th></tr></thead>
+      <tbody>
+        <tr><td><code>emotion</code></td><td>客户端 FSM</td><td>tap 后立刻 listen；等 API 时 think</td><td><code>listen</code></td></tr>
+        <tr><td><code>expression</code></td><td>LLM 结构化输出</td><td>API 返回 speak 时</td><td><code>happy</code></td></tr>
+        <tr><td><code>action</code></td><td>LLM 结构化输出</td><td>同上，映射到 clip</td><td><code>wave</code></td></tr>
+      </tbody>
+    </table>
+    <p class="muted">8 个 <code>emotion</code> 枚举已在 <code>firmware/include/ui.h</code>、Flutter、Web 三端对齐。expression / action 是<strong>二期扩展字段</strong>，不影响现有 API 兼容。</p>
+
+    <h2 id="format">4. 素材规格与内存预算</h2>
+    <table>
+      <thead><tr><th>参数</th><th>值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>单帧尺寸</td><td>160 × 176 px</td><td>竖屏全身，居中于 240×320</td></tr>
+        <tr><td>像素格式</td><td>RGB565</td><td>每帧 56,320 字节（≈ 55 KB）</td></tr>
+        <tr><td>推荐帧率</td><td>8–12 fps</td><td>即每帧 83–125 ms；当前 idle wave 为 90 ms</td></tr>
+        <tr><td>单 clip 帧数</td><td>8–16 帧</td><td>循环动画； speak 嘴型可更长</td></tr>
+        <tr><td>单 clip 体积</td><td>≈ 440 KB – 880 KB</td><td>12 帧 ≈ 675 KB</td></tr>
+      </tbody>
+    </table>
+    <h3>内存预算（ESP32-S3 N16R8）</h3>
+    <table>
+      <thead><tr><th>方案</th><th>clip 数</th><th>总占用</th><th>建议</th></tr></thead>
+      <tbody>
+        <tr><td>起步</td><td>4（idle / listen / think / speak）</td><td>≈ 2.7 MB</td><td><b>推荐先做</b></td></tr>
+        <tr><td>扩展</td><td>+3 表情变体（happy / shy / surprised）</td><td>≈ 4.7 MB</td><td>speak 阶段按 expression 切换</td></tr>
+        <tr><td>全量</td><td>8 emotion × 4 expression</td><td>≈ 21 MB</td><td>不可行，不要尝试</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="pipeline">5. 素材管线（含 AI 工具）</h2>
+    <p>目标：产出统一规格的 PNG 序列 → <code>pack_lumi_frames.py</code> → 固件二进制。固件格式不变，只换内容。</p>
+
+    <h3>5a. 现有管线（3D 烘焙，可选）</h3>
+    <pre>lumi.glb（Blender / Mixamo / USDZ 转 GLB）
+  → cloud/static/watch/bake.js（Three.js 离屏渲染）
+  → PNG 序列（160×176）
+  → scripts/pack_lumi_frames.py
+  → firmware/src/lumi_frames.rgb565 + include/lumi_frames.h</pre>
+    <p class="muted">GLB 不进 Git；<code>scripts/usd_to_glb.py</code> 可从 USDZ 转换。Web 预览用 <code>elf3d.js</code> 调 pose 后再烘。</p>
+
+    <h3>5b. 纯 2D / AI 生成（推荐探索方向）</h3>
+    <table>
+      <thead><tr><th>工具类型</th><th>举例</th><th>产出</th><th>注意</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>AI 视频 → 抽帧</td>
+          <td>Runway Gen-3、Pika、Kling、可灵</td>
+          <td>MP4 → ffmpeg 抽帧 → 抠图/缩放</td>
+          <td>需统一背景色、角色大小；人工筛帧去闪烁</td>
+        </tr>
+        <tr>
+          <td>AI 图生图 + 手动补帧</td>
+          <td>Midjourney、Stable Diffusion、Flux</td>
+          <td>关键 pose 各一张 → Aseprite 补中间帧</td>
+          <td>适合表情变化少的 idle / think</td>
+        </tr>
+        <tr>
+          <td>2D 骨骼 → 导出序列帧</td>
+          <td>Spine、DragonBones、Live2D Cubism</td>
+          <td>直接导出 PNG sprite sheet</td>
+          <td>表端不跑骨骼，只烘焙帧；制作效率最高</td>
+        </tr>
+        <tr>
+          <td>像素 / 逐帧手绘</td>
+          <td>Aseprite、Procreate、PixelOver</td>
+          <td>PNG 序列</td>
+          <td>风格最统一；适合小角色 160×176</td>
+        </tr>
+        <tr>
+          <td>Lottie → 烘焙</td>
+          <td>After Effects + Bodymovin</td>
+          <td>浏览器渲染后截图（类似 bake.js）</td>
+          <td>设备不跑 Lottie，但可以当制作工具</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>5c. 素材验收 checklist</h3>
+    <ul class="tight">
+      <li>背景色与表盘主页一致（当前 <code>#102a44</code> 或透明底）</li>
+      <li>角色在 160×176 框内居中，脚不裁切</li>
+      <li>循环点首尾 pose 接近（loop 无跳变）</li>
+      <li>帧数 8–16，文件总大小单 clip &lt; 900 KB</li>
+      <li>经 <code>pack_lumi_frames.py</code> 打包后在 Web 预览 GIF 检查</li>
+    </ul>
+
+    <h3>5d. 多 clip 打包（规划中）</h3>
+    <pre>lumi_frames.rgb565          ← 所有 clip 顺序拼接
+lumi_frames.h               ← clip 目录表
+
+struct LumiClip {
+  uint16_t offset;    // 起始帧 index
+  uint8_t  count;     // 帧数
+  uint16_t interval;  // ms / 帧
+  bool     loop;
+};</pre>
+    <p class="muted">换素材时只替换 <code>.rgb565</code> 和头文件里的 offset 表；若 clip 数量不变，固件逻辑可不动。</p>
+
+    <h2 id="ai">6. AI 怎么驱动表情</h2>
+    <div class="callout info">
+      <strong>原则</strong>
+      FSM 状态（listen / think）由客户端本地切；LLM 只在 speak 阶段决定「什么表情 + 什么动作」。
+      AI 只能从<strong>预定义目录</strong>里选，不能自由发明动画名。
+    </div>
+
+    <h3>6a. 云端 API 扩展（规划）</h3>
+    <p><code>POST /v1/sessions/{id}/turn</code> 返回值在现有字段上扩展：</p>
+    <pre>{
+  "emotion": "speak",
+  "expression": "happy",
+  "action": "wave",
+  "text": "嘿嘿，你好呀！",
+  "subtitle": "嘿嘿，你好呀！"
+}</pre>
+    <p>MQTT <code>dn/meta</code> 同步带上 <code>expression</code> 和 <code>action</code>。旧客户端忽略新字段，仍按 <code>emotion</code> 工作。</p>
+
+    <h3>6b. LLM 提示词（规划）</h3>
+    <pre>回复格式必须是 JSON：
+{"reply":"...", "expression":"happy|shy|surprised|sad|neutral", "action":"wave|nod|bounce|still"}
+expression 和 action 只能从上述选项里选。</pre>
+
+    <h3>6c. 一次对话的时序</h3>
+    <pre>用户 tap
+  ├─ 本地: emotion=listen,  clip=LISTEN_LEAN
+  ├─ 上传 text/audio
+  ├─ 本地: emotion=think,   clip=THINK_BLINK
+  │
+  ├─ API 返回: emotion=speak, expression=happy, action=wave
+  ├─ 本地: clip=SPEAK_HAPPY_WAVE, 播字幕
+  ├─ (未来) TTS 到达 → 嘴型帧跟 RMS
+  │
+  └─ 2.2s 后: emotion=idle, clip=IDLE_WAVE</pre>
+
+    <h3>6d. 动作目录（建议起步 6 个）</h3>
+    <table>
+      <thead><tr><th>action</th><th>用于</th><th>对应 clip</th></tr></thead>
+      <tbody>
+        <tr><td><code>still</code></td><td>quiet / 短回复</td><td>IDLE_BREATHE</td></tr>
+        <tr><td><code>wave</code></td><td>happy speak / 打招呼</td><td>SPEAK_HAPPY_WAVE</td></tr>
+        <tr><td><code>nod</code></td><td>listen / 表示在听</td><td>LISTEN_NOD</td></tr>
+        <tr><td><code>bounce</code></td><td>excited / alarm</td><td>ALARM_BOUNCE</td></tr>
+        <tr><td><code>tilt</code></td><td>think / 歪头想</td><td>THINK_TILT</td></tr>
+        <tr><td><code>peek</code></td><td>shy / 害羞</td><td>SPEAK_SHY_PEEK</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="firmware">7. 固件侧（最小改动原则）</h2>
+    <div class="callout warn">
+      <strong>换 2D 素材 ≠ 换固件</strong>
+      若 clip 数量和切换规则不变，只替换 <code>lumi_frames.rgb565</code> 即可。
+      固件改动仅在需要「按 emotion / expression 切 clip」时做。
+    </div>
+    <table>
+      <thead><tr><th>改动</th><th>文件</th><th>必要性</th></tr></thead>
+      <tbody>
+        <tr><td>clip 播放器（offset + loop）</td><td><code>firmware/src/bw_ui.cpp</code></td><td>多 clip 时必须</td></tr>
+        <tr><td>clip 目录表</td><td><code>firmware/include/lumi_frames.h</code></td><td>多 clip 时必须</td></tr>
+        <tr><td>emotion → clip 映射</td><td><code>bw_ui.cpp</code> 或 <code>ui.cpp</code></td><td>按表情切换时必须</td></tr>
+        <tr><td>仅换帧内容</td><td><code>lumi_frames.rgb565</code></td><td>素材迭代，随时可换</td></tr>
+        <tr><td>Legacy GFX 路径</td><td><code>firmware/src/ui.cpp</code></td><td><code>BW_USE_LVGL=0</code> 时仍可用；不优先维护</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">当前 gap：<code>bwUiShowHome(subtitle, faceHex)</code> 里 <code>faceHex</code> 被忽略，sprite 不随 emotion 切换。这是下一步固件最小增量。</p>
+
+    <h2 id="roadmap">8. 分阶段路线</h2>
+    <table>
+      <thead><tr><th>阶段</th><th>内容</th><th>改固件？</th><th>验收</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="tag t-done">P0 已有</span></td>
+          <td>单 clip idle wave + LVGL 主页 + Web 3D 预览</td>
+          <td>—</td>
+          <td>表上 Lumi 循环挥手；Web emotion 切换</td>
+        </tr>
+        <tr>
+          <td><span class="tag t-next">P1 素材</span></td>
+          <td>用 AI / 手绘产出 4 个 core clip（idle/listen/think/speak）</td>
+          <td>否（先打包进现有格式）</td>
+          <td>预览 GIF 流畅、循环无跳变</td>
+        </tr>
+        <tr>
+          <td><span class="tag t-next">P2 固件</span></td>
+          <td>clip 播放器 + emotion → clip 映射</td>
+          <td>是（最小）</td>
+          <td>tap 对话时 listen/think/speak 脸不同</td>
+        </tr>
+        <tr>
+          <td><span class="tag t-plan">P3 云端</span></td>
+          <td>LLM 结构化 expression + action；API 扩展字段</td>
+          <td>否</td>
+          <td>说「好开心」→ happy + wave</td>
+        </tr>
+        <tr>
+          <td><span class="tag t-plan">P4 扩展</span></td>
+          <td>+3 表情 speak clip；TTS 嘴型 RMS 同步</td>
+          <td>可选</td>
+          <td>speak 时嘴跟声音动</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 id="files">9. 仓库文件索引</h2>
+    <table>
+      <thead><tr><th>路径</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td><code>firmware/src/bw_ui.cpp</code></td><td>LVGL 主页、Lumi sprite 播放</td></tr>
+        <tr><td><code>firmware/src/lumi_frames.rgb565</code></td><td>烘焙后的帧二进制（不进 Git diff 友好时可 LFS）</td></tr>
+        <tr><td><code>firmware/include/lumi_frames.h</code></td><td>帧宽/高/数量常量</td></tr>
+        <tr><td><code>firmware/include/ui.h</code></td><td>8 种 Emotion 枚举</td></tr>
+        <tr><td><code>cloud/static/watch/bake.js</code></td><td>Three.js 离屏烘焙（可选源）</td></tr>
+        <tr><td><code>cloud/static/watch/elf3d.js</code></td><td>Web 3D 预览 + pose 调试</td></tr>
+        <tr><td><code>cloud/static/watch/watch.js</code></td><td>Web 假手表 emotion 切换</td></tr>
+        <tr><td><code>scripts/pack_lumi_frames.py</code></td><td>PNG → RGB565 + 预览 GIF</td></tr>
+        <tr><td><code>scripts/usd_to_glb.py</code></td><td>USDZ → GLB（可选）</td></tr>
+        <tr><td><code>cloud/llm.py</code></td><td>LLM 调用 + pick_emotion（待扩展）</td></tr>
+        <tr><td><code>app/lib/models/emotion.dart</code></td><td>Flutter 端 emotion 枚举</td></tr>
+      </tbody>
+    </table>
+
+    <footer>
+      BondWatch · 2D 表情动画方案 v1.0 · 真表 2D 精灵 · 3D 仅制作工具 · 优先换素材少改固件<br />
+      下一步：用 AI 工具产出 4 个 core clip → 打包验证 → 固件 clip 切换
+    </footer>
+  </div>
+</body>
+</html>

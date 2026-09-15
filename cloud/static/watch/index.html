@@ -10,10 +10,10 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <title>BondWatch</title>
   <link rel="manifest" href="/manifest.json" />
-  <link rel="stylesheet" href="/watch.css?v=6" />
-  <script src="/orient.js?v=2"></script>
+  <link rel="stylesheet" href="/watch.css?v=8" />
+  <script src="/orient.js?v=3"></script>
 </head>
-<body>
+<body class="has-2d-lumi">
   <div class="fit">
     <div class="rig">
       <button class="hw pwr" id="pwr" type="button" aria-label="电源">PWR</button>
@@ -21,6 +21,7 @@
         <div class="screen" id="screen">
           <p class="clock" id="clock">00:00</p>
           <span class="orient-badge" id="orient-badge">竖屏</span>
+          <img id="lumi2d" class="lumi2d" src="/models/lumi_wave.gif?v=4" width="160" height="176" alt="" />
           <canvas id="elf3d"></canvas>
           <div class="elf" id="face">
             <span class="ear left"></span>
@@ -37,7 +38,7 @@
         </div>
       </div>
       <button class="hw ptt" id="ptt" type="button" aria-label="对讲">PTT</button>
-      <p class="hint" id="hint">竖屏全身挥手 · 横屏大脸耷拉</p>
+      <p class="hint" id="hint">2D 精灵封面 · 点屏幕说话</p>
       <button class="cam" id="cam" type="button">看 · 手机眼睛</button>
     </div>
   </div>
@@ -46,7 +47,7 @@
   <script type="importmap">
     { "imports": { "three": "/vendor/three.module.js" } }
   </script>
-  <script type="module" src="/elf3d.js?v=21"></script>
+  <script type="module" src="/elf3d.js?v=28"></script>
   <script src="/watch.js?v=5"></script>
 </body>
 </html>

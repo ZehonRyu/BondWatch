@@ -16,6 +16,7 @@ class _LoginPageState extends State<LoginPage> {
   final _pass = TextEditingController(text: 'demo123');
   final _name = TextEditingController();
   final _api = TextEditingController();
+  final _pair = TextEditingController();
   bool _register = false;
 
   @override
@@ -30,6 +31,7 @@ class _LoginPageState extends State<LoginPage> {
     _pass.dispose();
     _name.dispose();
     _api.dispose();
+    _pair.dispose();
     super.dispose();
   }
 
@@ -62,10 +64,30 @@ class _LoginPageState extends State<LoginPage> {
                         const Text('BONDWATCH', style: TextStyle(letterSpacing: 3, color: Colors.white54)),
                         const SizedBox(height: 8),
                         Text(
-                          _register ? '建一个账号' : '回到这只表',
+                          _register ? '建一个账号' : '绑定手表',
                           style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w500),
                         ),
+                        const SizedBox(height: 8),
+                        const Text('输入手表上的 PAIR 四位码，手机和电脑就能看到表盘说话。',
+                            style: TextStyle(color: Colors.white54, fontSize: 13)),
                         const SizedBox(height: 20),
+                        TextField(
+                          controller: _pair,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: '手表配对码 PAIR'),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: () {
+                              widget.state.api.baseUrl = _api.text.trim();
+                              widget.state.joinWithCode(_pair.text.trim());
+                            },
+                            child: const Text('用配对码绑定'),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                         TextField(controller: _user, decoration: const InputDecoration(labelText: '用户名')),
                         TextField(
                           controller: _pass,

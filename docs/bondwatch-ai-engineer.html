@@ -62,7 +62,7 @@
 <body>
   <div class="wrap">
     <h1>云端 AI 工程师交付说明</h1>
-    <p class="sub">只覆盖云端这一人。手表和假手表只做眼睛和嘴巴。 返回 <a href="bondwatch-board.html">计划看板</a>。</p>
+    <p class="sub">只覆盖云端这一人。手表和假手表只做眼睛和嘴巴。2D 表情规格见 <a href="bondwatch-2d-animation.html">2D 动画方案</a>。 返回 <a href="bondwatch-board.html">计划看板</a>。</p>
     <nav class="row" id="tabs"></nav>
     <main id="app"></main>
     <p class="offline">静态页 · 不需要联网 · 双击用浏览器打开</p>
@@ -116,14 +116,20 @@
     [
       "语音流水线",
       "P0",
-      "WS /v1/sessions/{id}/audio：上行 PCM 16kHz 单声道（可后加 opus）；ASR → LLM → TTS",
-      "半双工：TTS 播放中忽略新音频，直到客户端发 interrupt"
+      "MQTT：bw/{device_id}/up/audio 上行 PCM 16kHz 单声道；STT → LLM → TTS；dn/meta 先发 emotion，再 dn/audio",
+      "半双工：TTS 播放中忽略新音频，直到 up/ctrl interrupt"
     ],
     [
       "情绪标签",
       "P0",
-      "下行先 JSON emotion，再音频。枚举固定：think / speak（云端必发）；idle/listen/quiet/silent/alarm/offline 由端上发或本地切",
+      "下行先 JSON emotion，再音频。枚举固定：think / speak（云端必发）；idle/listen/quiet/silent/alarm/offline 由端上 FSM 本地切",
       "第一包音频到达前，客户端已经收到 emotion。禁止音频比标签早"
+    ],
+    [
+      "表情结构化输出",
+      "P1",
+      "/turn 与 dn/meta 扩展 expression（happy/shy/surprised/sad/neutral）+ action（wave/nod/bounce/still/peek）。LLM JSON mode，白名单校验",
+      "说「好开心呀」→ expression=happy, action=wave。旧客户端忽略新字段仍可用"
     ],
     [
       "长期记忆",
@@ -176,7 +182,7 @@
     [
       "打断",
       "P0",
-      "WS 控制帧 interrupt：停 TTS 生成和推流",
+      "up/ctrl interrupt：停 TTS 生成和 MQTT 推流",
       "从收到 interrupt 到音频流结束 ≤ 200ms"
     ],
     [
@@ -230,7 +236,7 @@
     [
       "情绪先于声音",
       "必须",
-      "WS 事件顺序：emotion=think 或 speak，然后才是 audio 帧",
+      "MQTT dn/meta 先带 emotion=think 或 speak，然后才是 dn/audio 帧",
       "100% 轮次标签早于音频 ≥ 80 ms",
       "9/02"
     ],
@@ -333,7 +339,7 @@
   "handoff": [
     [
       "交给客户端",
-      "Base URL、登录示例、WS 帧格式（emotion / audio / text / interrupt）、settings.proactive_enabled、nudges 字段"
+      "Base URL、登录示例、MQTT 主题（up/audio、up/ctrl、dn/meta、dn/audio）、expression+action 字段（P1）、settings.proactive_enabled、nudges 字段"
     ],
     [
       "向客户端收",

@@ -97,7 +97,7 @@ class _BondWatchAppState extends State<BondWatchApp> {
                 }
               },
               destinations: const [
-                NavigationDestination(icon: Icon(Icons.watch), label: '假手表'),
+                NavigationDestination(icon: Icon(Icons.watch), label: '手表'),
                 NavigationDestination(icon: Icon(Icons.tune), label: '管理'),
               ],
             ),

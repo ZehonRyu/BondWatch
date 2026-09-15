@@ -62,7 +62,7 @@
 <body>
   <div class="wrap">
     <h1>BondWatch 计划看板</h1>
-    <p class="sub">项目负责人看板。本文件可离线打开。 另有 <a href="bondwatch-wiring.html">对着接线</a> · <a href="bondwatch-software-design.html">软件需求与 UI 设计（审阅稿）</a> · <a href="bondwatch-ai-engineer.html">云端 AI 工程师交付说明</a>。</p>
+    <p class="sub">项目负责人看板。本文件可离线打开。 另有 <a href="bondwatch-wiring.html">对着接线</a> · <a href="bondwatch-ai-engineer.html">云端 AI 工程师交付说明</a>。</p>
     <nav class="row" id="tabs"></nav>
     <main id="app"></main>
     <p class="offline">静态页 · 不需要联网 · 双击用浏览器打开</p>
@@ -393,9 +393,9 @@
       "id": "W11",
       "area": "watch",
       "priority": "P0",
-      "need": "表情动画：竖屏全身挥手；横屏全屏大脸耷拉。网页 :11112 用 3D 感知手机横竖屏；真表 ESP32 自绘 2D，不跑 Three.js",
+      "need": "2D 精灵动画：160×176 RGB565 帧序列，4 个 core clip（idle/listen/think/speak）。:11112 用 3D 预览 pose；真表只播烘焙帧，不跑 Three.js。优先换素材少改固件",
       "where": "网页+固件",
-      "accept": "转手机出现横屏角标和大脸；Wokwi 串口 r 切换全身/大脸；真表不做屏外 3D 手"
+      "accept": "tap 对话时 listen/think/speak 脸不同；换 .rgb565 不必动核心逻辑；详见 bondwatch-2d-animation.html"
     },
     {
       "id": "W12",
@@ -1370,10 +1370,10 @@
       "11112 只模拟表盘效果，不假装手表里跑安卓"
     ],
     [
-      "3D 表情",
-      "网页/手机 :11112：竖屏全身挥手，横屏全屏大脸耷拉，能感知手机横屏。真表 ESP32 自绘 2D，不跑 Three.js",
+      "2D 精灵动画",
+      "真表 RGB565 帧序列（160×176）；:11112 用 3D 预览与可选烘焙。AI/手绘/3D 均可作素材源。优先换素材少改固件",
       "已冻",
-      "真表不做屏外 3D 手；要类似效果就预渲染序列"
+      "真表不跑 Three.js/WebGL；3D 仅制作工具。见 bondwatch-2d-animation.html"
     ],
     [
       "人手",
@@ -1562,43 +1562,53 @@
   "emotions": [
     [
       "idle",
-      "待机",
-      "呼吸 + 眨眼"
+      "待机（FSM）",
+      "IDLE_WAVE clip · 呼吸挥手"
     ],
     [
       "listen",
-      "聆听",
-      "耳朵动、嘴轻张"
+      "聆听（FSM）",
+      "LISTEN_NOD clip · 本地 tap 后立刻切"
     ],
     [
       "think",
-      "思考",
-      "歪头晃"
+      "思考（FSM）",
+      "THINK_TILT clip · 等 API 期间"
     ],
     [
       "speak",
-      "说话",
-      "嘴一张一合"
+      "说话（FSM）",
+      "SPEAK_* clip · 由 expression+action 选变体"
     ],
     [
       "quiet",
       "小声/勿扰",
-      "表情 + 字幕"
+      "STILL clip + 字幕"
     ],
     [
       "silent",
       "完全无声",
-      "脸 + 字幕，喇叭为零"
+      "STILL clip + 字幕，喇叭为零"
     ],
     [
       "alarm",
       "闹钟",
-      "晃脸，本地铃"
+      "BOUNCE clip · 本地铃"
     ],
     [
       "offline",
       "没网",
-      "发灰闪一下 + 短字"
+      "发灰 + 短字"
+    ],
+    [
+      "expression",
+      "表情（LLM）",
+      "happy / shy / surprised / sad / neutral · 规划字段"
+    ],
+    [
+      "action",
+      "动作（LLM）",
+      "wave / nod / bounce / still / peek · 有限目录 · 规划字段"
     ]
   ],
   "pins": [
@@ -1968,7 +1978,7 @@
       "中",
       "客户端",
       "有人要 ESP32 跑 Three.js 或屏外手",
-      "真表只自绘 2D；3D 只在 :11112"
+      "真表只播 RGB565 精灵；3D 只在 :11112 预览/烘焙。见 bondwatch-2d-animation.html"
     ]
   ],
   "rules": [

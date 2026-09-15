@@ -83,7 +83,7 @@ const REQUIREMENTS: {
   { id: "W08", area: "watch", priority: "P1", need: "可接蓝牙耳机；有耳机时声音走耳机，没耳机且音量低走字幕", where: "手表", accept: "连接耳机后外放停" },
   { id: "W09", area: "watch", priority: "P1", need: "表端不缓存长期记忆正文", where: "手表", accept: "拆机或导出存储看不到对话记忆" },
   { id: "W10", area: "watch", priority: "P0", need: "产品要有表上摄像头。本套 DevKit 脚已满，用手机/网页「看」顶上同一条 /turn image_base64。下一版 PCB 必须留 DVP/CSI 座", where: "手表+云", accept: "假手表拍一张能短回；Arduino SEE 键能走「看着照片」状态机；真镜头不焊在这套面包板上" },
-  { id: "W11", area: "watch", priority: "P0", need: "表情动画：竖屏全身挥手；横屏全屏大脸耷拉。网页 :11112 用 3D 感知手机横竖屏；真表 ESP32 自绘 2D，不跑 Three.js", where: "网页+固件", accept: "转手机出现横屏角标和大脸；Wokwi 串口 r 切换全身/大脸；真表不做屏外 3D 手" },
+  { id: "W11", area: "watch", priority: "P0", need: "2D 精灵动画：160×176 RGB565 帧序列，4 个 core clip（idle/listen/think/speak）。:11112 用 3D 预览 pose；真表只播烘焙帧，不跑 Three.js。优先换素材少改固件", where: "网页+固件", accept: "tap 对话时 listen/think/speak 脸不同；换 .rgb565 不必动核心逻辑；详见 bondwatch-2d-animation.html" },
   { id: "W12", area: "watch", priority: "P0", need: "Arduino/Wokwi 用同一份 pins.h 把听-想-说、键、点屏、看、勿扰、闹钟、没网、4G 灯、横竖屏状态机先跑通", where: "固件", accept: "PlatformIO 能编过；Wokwi 能点 PWR/PTT/TAP/SEE；串口 h 有帮助" },
 
   { id: "A01", area: "android", priority: "P0", need: "手机 App 是绑定主入口：扫表上二维码或 BLE 近场", where: "Android", accept: "两种方式任选一种能把表绑到账号" },
@@ -259,7 +259,7 @@ const DECISIONS = [
   ["看图", "DeepSeek 只吃文字。图先走本机 OpenCV，或任意 OpenAI 兼容视觉 API，再把一句话摘要喂给它", "已冻", "不把 OpenCV 塞进云端镜像；不指望 DeepSeek 直接看图"],
   ["软件栈", "FastAPI + Flutter；Arduino 点亮；IDF 后置", "已冻", "不并行第二套客户端"],
   ["表盘模拟", "iPhone 等手机浏览器打开 :11112，只显示 240×280 烧录脸。真表是 ESP32 自绘，不是安卓/iOS", "已冻", "11112 只模拟表盘效果，不假装手表里跑安卓"],
-  ["3D 表情", "网页/手机 :11112：竖屏全身挥手，横屏全屏大脸耷拉，能感知手机横屏。真表 ESP32 自绘 2D，不跑 Three.js", "已冻", "真表不做屏外 3D 手；要类似效果就预渲染序列"],
+  ["2D 精灵动画", "真表 RGB565 帧序列（160×176）；:11112 用 3D 预览与可选烘焙。AI/手绘/3D 均可作素材源。优先换素材少改固件", "已冻", "真表不跑 Three.js/WebGL；3D 仅制作工具。见 bondwatch-2d-animation.html"],
   ["人手", "硬件接线安装 / 客户端编写烧录（固件+Android+Windows） / 云端 AI 实现，三人并行", "已冻", "不要让一个人同时扛三摊；假手表已带动画，真表固件眨眼张嘴即可"],
   ["工期", "2026-08-18 至 09-22，日历 37 天（含双休）。周末不排活，实际约 26 个工作日。正式演示 9/18", "已冻", "周末不加班赶新功能"],
 ];
@@ -308,14 +308,16 @@ const API_ROWS = [
 ];
 
 const EMOTION_ROWS = [
-  ["idle", "待机", "呼吸 + 眨眼"],
-  ["listen", "聆听", "耳朵动、嘴轻张"],
-  ["think", "思考", "歪头晃"],
-  ["speak", "说话", "嘴一张一合"],
-  ["quiet", "小声/勿扰", "表情 + 字幕"],
-  ["silent", "完全无声", "脸 + 字幕，喇叭为零"],
-  ["alarm", "闹钟", "晃脸，本地铃"],
-  ["offline", "没网", "发灰闪一下 + 短字"],
+  ["idle", "待机（FSM）", "IDLE_WAVE clip · 呼吸挥手"],
+  ["listen", "聆听（FSM）", "LISTEN_NOD clip · 本地 tap 后立刻切"],
+  ["think", "思考（FSM）", "THINK_TILT clip · 等 API 期间"],
+  ["speak", "说话（FSM）", "SPEAK_* clip · 由 expression+action 选变体"],
+  ["quiet", "小声/勿扰", "STILL clip + 字幕"],
+  ["silent", "完全无声", "STILL clip + 字幕，喇叭为零"],
+  ["alarm", "闹钟", "BOUNCE clip · 本地铃"],
+  ["offline", "没网", "发灰 + 短字"],
+  ["expression", "表情（LLM）", "happy / shy / surprised / sad / neutral · 规划字段"],
+  ["action", "动作（LLM）", "wave / nod / bounce / still / peek · 有限目录 · 规划字段"],
 ];
 
 const PIN_ROWS = [
@@ -436,7 +438,7 @@ const RISKS = [
   ["主动开口太烦", "中", "高", "云端 AI", "用户关掉主动或差评吵", "默认安静；白名单；每日上限；勿扰闭嘴；有电脑先电脑说"],
   ["引脚各改各的", "高", "中", "全员", "有人生成了另一套 GPIO", "只准改接口约定和 pins.h 这一张表，硬件拍照存档"],
   ["把「现在不焊镜头」当成产品取消摄像头", "中", "高", "负责人", "采购或需求写成永远没有眼睛", "冻结：产品要镜头；本套板用手机顶上；下一版留 DVP 座"],
-  ["把网页 3D 当成真表能力", "中", "中", "客户端", "有人要 ESP32 跑 Three.js 或屏外手", "真表只自绘 2D；3D 只在 :11112"],
+  ["把网页 3D 当成真表能力", "中", "中", "客户端", "有人要 ESP32 跑 Three.js 或屏外手", "真表只播 RGB565 精灵；3D 只在 :11112 预览/烘焙。见 bondwatch-2d-animation.html"],
 ];
 
 const RULES = [

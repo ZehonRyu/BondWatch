@@ -134,10 +134,12 @@
   <div class="wrap">
     <h1>BondWatch 软件需求与 UI 设计<span class="draft">审阅稿 v0.1</span></h1>
     <p class="sub">
-      约束：开源 <b>FreeRTOS</b>（ESP32-S3 / Espressif）· 表端不跑大模型 · 默认中文。
+      约束：开源 <b>FreeRTOS</b>（ESP32-S3 / Espressif）· 表端不跑大模型 · 语音 MQTT（YunDo 骨架）· 默认中文。
       关联：<a href="bondwatch-board.html">总看板需求表</a> ·
+      <a href="bondwatch-tech-route.html">技术路线</a> ·
+      <a href="bondwatch-2d-animation.html">2D 表情动画</a> ·
       <a href="bondwatch-sim.html">界面模拟</a> ·
-      本文专门把<strong>软件端 / 界面 / 手势</strong>说清楚，供你改完再冻结。
+      本文专门把<strong>软件端 / 界面 / 手势</strong>说清楚。
     </p>
 
     <div class="callout info">
@@ -154,6 +156,7 @@
         <li><a href="#req">软件需求（分期）</a></li>
         <li><a href="#ia">界面信息架构</a></li>
         <li><a href="#gesture">手势与按键语言</a></li>
+        <li><a href="#animation">2D 表情动画（已拍板）</a></li>
         <li><a href="#visual">怎样把 UI 做高级</a></li>
         <li><a href="#best">怎样把整体做得最好</a></li>
         <li><a href="#freeze">待你拍板的冻结项</a></li>
@@ -170,9 +173,9 @@
       <div class="card">
         <h3>软件边界</h3>
         <ul class="tight">
-          <li><b>表端 FreeRTOS</b>：显示、触摸、键、闹钟、勿扰、网络收发</li>
+          <li><b>表端 FreeRTOS / Arduino</b>：显示、触摸、键、闹钟、勿扰；二期加 I2S + MQTT 客户端</li>
           <li><b>手机 Flutter</b>：绑定、管理、假手表、长聊放大</li>
-          <li><b>云 Python</b>：ASR / LLM / TTS / 记忆 / 情绪标签</li>
+          <li><b>云 Python</b>：FastAPI 控制面 + MQTT 媒体面；STT / LLM / TTS / 记忆 / 情绪</li>
         </ul>
       </div>
     </div>
@@ -205,8 +208,8 @@
         <tr>
           <td><code>net_task</code></td>
           <td>中（二期）</td>
-          <td>Wi‑Fi / 4G、会话 API</td>
-          <td>断网降级：闹钟/勿扰/提示脸</td>
+          <td>Wi‑Fi / 4G、FastAPI 控制面、MQTT 采播</td>
+          <td>断网降级：闹钟/勿扰/提示脸。音频不走 HTTP</td>
         </tr>
         <tr>
           <td><code>persist_task</code></td>
@@ -216,11 +219,16 @@
         </tr>
       </tbody>
     </table>
+    <div class="callout info">
+      <strong>语音技术路线（对照 ESP32.AI / YunDo）</strong>
+      表只采音、放音、画脸。识别→大模型→合成在 Python。传输用 MQTT，不用表直连 WebSocket 音频。
+      <b>不刷 MicroPython</b>。细节见 <a href="bondwatch-tech-route.html">bondwatch-tech-route.html</a>。
+    </div>
     <div class="callout warn">
-      <strong>UI 技术选型建议</strong>
-      现阶段：Adafruit GFX + U8g2 中文（已跑通）。<br />
-      界面继续加深时：迁 <b>LVGL on FreeRTOS</b>（业界 MCU 表常见，动画/列表更高级，仍开源）。
-      不要为「看起来像智能表」去换 Wear OS 模组，除非产品形态改成买现成表芯。
+      <strong>UI 技术选型（更新）</strong>
+      主路径已迁 <b>LVGL 8.3</b>（<code>BW_USE_LVGL=1</code>，页面栈 + Lumi 精灵帧）。
+      Legacy Adafruit GFX 路径（<code>ui.cpp</code>）保留作回退，不优先维护。
+      不要为「看起来像智能表」去换 Wear OS 模组。
     </div>
 
     <h2 id="req">3. 软件需求（分期）</h2>
@@ -339,7 +347,24 @@
     </table>
     <p class="muted">应用墙：主页 / 时钟 / 闹钟 / 秒表 / 声音 / 设置。控制中心含勿扰、手电、亮度、音量、锁屏、进应用。</p>
 
-    <h2 id="visual">6. 怎样把 UI 做高级（FreeRTOS 可行）</h2>
+    <h2 id="animation">6. 2D 表情动画（已拍板）</h2>
+    <div class="callout info">
+      <strong>真表 = RGB565 精灵动画；3D 只在 :11112 预览</strong>
+      角色 Lumi 以 160×176 帧序列播放。当前 12 帧 idle wave 已上表；
+      下一步做 4 个 core clip（idle / listen / think / speak），由 AI 或 3D 烘焙产出素材。
+      固件只在需要多 clip 切换时做最小改动；<b>换脸 = 换素材，不必动核心逻辑</b>。
+    </div>
+    <table>
+      <thead><tr><th>层</th><th>字段</th><th>谁决定</th><th>现状</th></tr></thead>
+      <tbody>
+        <tr><td>交互状态</td><td><code>emotion</code></td><td>客户端 FSM</td><td>8 枚举已三端对齐；字幕/背景已切换</td></tr>
+        <tr><td>表情</td><td><code>expression</code></td><td>LLM</td><td>规划中（happy / shy / surprised / sad / neutral）</td></tr>
+        <tr><td>动作</td><td><code>action</code></td><td>LLM 有限目录</td><td>规划中（wave / nod / bounce / still / peek）</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">素材规格、AI 工具推荐、内存预算、分阶段路线 → <a href="bondwatch-2d-animation.html">bondwatch-2d-animation.html</a></p>
+
+    <h2 id="visual">7. 怎样把 UI 做高级（FreeRTOS 可行）</h2>
     <div class="grid3">
       <div class="card">
         <h3>1. 少即是多</h3>
@@ -379,17 +404,17 @@
       </tbody>
     </table>
 
-    <h2 id="best">7. 怎样把整体做得最好</h2>
+    <h2 id="best">8. 怎样把整体做得最好</h2>
     <ol>
       <li><b>双轨 UI</b>：交互与文案先在 <code>bondwatch-sim.html</code> / Flutter 假手表定稿，每周只向固件合入「已冻结」页。</li>
-      <li><b>表情库优先于皮肤</b>：先做出 6–8 种可读情绪脸，比换主题更赚「高级感」。</li>
+      <li><b>表情库优先于皮肤</b>：先做出 4 个 core clip（idle/listen/think/speak），再扩展 happy/shy 变体；比换主题更赚「高级感」。</li>
       <li><b>二期语音要「半双工礼貌」</b>：它说时你点按才打断；默认不开常听，建立信任。</li>
       <li><b>云端人格资产</b>：人设、记忆、场合白名单放云端；表端只缓存闹钟/勿扰/亮度。</li>
       <li><b>演示脚本</b>：准备 60 秒演示——亮屏脸 → 控制中心勿扰 → 闹钟 →（二期）一轮对话表情对得上。</li>
       <li><b>何时上 LVGL</b>：当设置超过一屏、需要滑列表惯性/开关组件时再迁；现在不必为迁而迁。</li>
     </ol>
 
-    <h2 id="freeze">8. 冻结项（v0.2 已拍板）</h2>
+    <h2 id="freeze">9. 冻结项（v0.3 已拍板）</h2>
     <table>
       <thead><tr><th>#</th><th>问题</th><th>决定</th></tr></thead>
       <tbody>
@@ -397,13 +422,15 @@
         <tr><td>2</td><td>第二实体键</td><td>音量；对讲靠触摸</td></tr>
         <tr><td>3</td><td>应用墙</td><td>保留（主页/时钟/闹钟/秒表/声音/设置）</td></tr>
         <tr><td>4</td><td>横屏</td><td>一期锁定竖屏</td></tr>
-        <tr><td>5</td><td>UI 库</td><td>继续 GFX；列表痛了再迁 LVGL</td></tr>
-        <tr><td>6</td><td>手势方案</td><td><b>Model B</b>（已写入固件与模拟器）</td></tr>
+        <tr><td>5</td><td>UI 库</td><td>主路径 LVGL 8.3 页面栈；Legacy GFX 保留回退</td></tr>
+        <tr><td>6</td><td>手势方案</td><td>竖滑控制 / 横滑设置（已写入固件）</td></tr>
+        <tr><td>7</td><td>语音传输</td><td>MQTT 主题（见技术路线）；不作废控制面 HTTP</td></tr>
+        <tr><td>8</td><td>表情渲染</td><td>真表 2D RGB565 精灵；3D 仅 :11112 预览与可选烘焙源；优先换素材少改固件</td></tr>
       </tbody>
     </table>
 
     <footer>
-      BondWatch · 软件需求与 UI 设计审阅稿 v0.1 · FreeRTOS / ESP32-S3 · 可离线打开<br />
+      BondWatch · 软件需求与 UI 设计审阅稿 v0.3 · 2D 精灵已拍板 · 语音见 <a href="bondwatch-tech-route.html">技术路线</a><br />
       总原则仍以 <a href="bondwatch-board.html">bondwatch-board.html</a> 产品需求为准；本文是软件与交互的展开与修订提案。
     </footer>
   </div>

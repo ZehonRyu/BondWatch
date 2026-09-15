@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { GLTFLoader } from "/vendor/addons/loaders/GLTFLoader.js";
+import { GLTFLoader } from "./vendor/addons/loaders/GLTFLoader.js";
 
 const faces = {
   idle: 0x5d9cec,
@@ -126,6 +126,13 @@ function saveRest(obj) {
   obj.userData.restP = obj.position.clone();
 }
 
+function restoreRest(root) {
+  root.traverse((obj) => {
+    if (obj.userData.restQ) obj.quaternion.copy(obj.userData.restQ);
+    if (obj.userData.restP) obj.position.copy(obj.userData.restP);
+  });
+}
+
 function addLocal(obj, x, y, z) {
   if (!obj || !obj.userData.restQ) return;
   obj.quaternion.copy(obj.userData.restQ);
@@ -188,20 +195,44 @@ function bindBoy(scene) {
     tongue: pick(scene, "bob_Shetou"),
   };
   Object.values(bones).forEach(saveRest);
+  scene.traverse((obj) => {
+    if (obj.isBone) saveRest(obj);
+  });
   scene.userData.bones = bones;
   scene.userData.procedural = false;
+  console.log("lumi bones", Object.fromEntries(Object.entries(bones).map(([k, v]) => [k, Boolean(v)])));
   return scene;
 }
 
 async function loadBoy() {
-  const gltf = await new GLTFLoader().loadAsync("/models/boybase.glb");
+  const loader = new GLTFLoader();
+  const urls = [
+    new URL("./models/lumi.glb?v=26", import.meta.url).href,
+    new URL("./models/boybase.glb?v=26", import.meta.url).href,
+  ];
+  let gltf = null;
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      gltf = await loader.loadAsync(url);
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (!gltf) {
+    throw lastErr || new Error("no character glb");
+  }
   const model = gltf.scene;
-  model.updateMatrixWorld(true);
-  const raw = new THREE.Box3().setFromObject(model);
-  const size = raw.getSize(new THREE.Vector3());
-  const center = raw.getCenter(new THREE.Vector3());
   const wrap = new THREE.Group();
   wrap.add(model);
+  wrap.updateMatrixWorld(true);
+  wrap.traverse((obj) => {
+    if (obj.isSkinnedMesh && obj.skeleton) obj.skeleton.update();
+  });
+  const raw = new THREE.Box3().setFromObject(wrap);
+  const size = raw.getSize(new THREE.Vector3());
+  const center = raw.getCenter(new THREE.Vector3());
   model.position.sub(center);
   wrap.scale.setScalar(1.42 / Math.max(size.x, size.y, size.z, 0.001));
   wrap.updateMatrixWorld(true);
@@ -211,11 +242,20 @@ async function loadBoy() {
   bindBoy(model);
   wrap.userData.procedural = false;
   wrap.userData.bones = model.userData.bones;
+  if (gltf.animations && gltf.animations.length) {
+    const mixer = new THREE.AnimationMixer(model);
+    const wave = mixer.clipAction(gltf.animations[0]);
+    wave.setLoop(THREE.LoopRepeat, Infinity);
+    wave.play();
+    wrap.userData.mixer = mixer;
+    wrap.userData.wave = wave;
+    console.log("lumi wave clip", gltf.animations[0].name, gltf.animations[0].duration);
+  }
   wrap.userData.height = new THREE.Box3().setFromObject(wrap).getSize(new THREE.Vector3()).y;
   model.traverse((obj) => {
     if (obj.isMesh) {
       obj.frustumCulled = false;
-      if (obj.material) obj.material.side = THREE.FrontSide;
+      if (obj.material) obj.material.side = THREE.DoubleSide;
     }
   });
   return wrap;
@@ -278,15 +318,16 @@ export async function mountElf3D(canvas) {
   }
 
   function landscape() {
-    const wide = window.isWatchLandscape ? window.isWatchLandscape() : window.matchMedia("(orientation: landscape)").matches;
-    document.documentElement.classList.toggle("is-landscape", wide);
-    document.body.classList.toggle("is-landscape", wide);
-    return wide;
+    if (typeof window.isWatchLandscape === "function") return window.isWatchLandscape();
+    const w = canvas.clientWidth || 240;
+    const h = canvas.clientHeight || 280;
+    return w > h + 12;
   }
 
   let lastWide = null;
+  const clock = new THREE.Clock();
 
-  function pose(t) {
+  function pose(t, dt) {
     const wide = landscape();
     if (wide !== lastWide) {
       lastWide = wide;
@@ -294,8 +335,14 @@ export async function mountElf3D(canvas) {
     }
     const u = elf.userData;
     const b = u.bones || {};
+    const mixer = u.mixer;
+    const waveClip = u.wave;
 
     if (wide) {
+      if (waveClip && waveClip.isRunning()) {
+        waveClip.stop();
+        restoreRest(elf);
+      }
       elf.position.set(0, baseY, 0);
       elf.rotation.set(0.12, 0, 0);
       if (u.procedural) {
@@ -317,30 +364,45 @@ export async function mountElf3D(canvas) {
         addWorld(b.handR, 0, 0, 0);
       }
     } else {
-      const hop = Math.abs(Math.sin(t * 3.4)) * 0.045;
+      const hop = mixer ? Math.abs(Math.sin(t * 2.2)) * 0.02 : Math.abs(Math.sin(t * 3.4)) * 0.045;
+      const wave = Math.sin(t * 6.8);
+      const excited = emotion === "listen" || emotion === "speak" || emotion === "alarm";
+      const amp = excited ? 1.45 : 1.15;
       elf.position.set(0, baseY + hop, 0);
-      elf.rotation.set(baseRot.x, Math.sin(t * 1.4) * 0.08, 0);
-      if (u.procedural) {
+      elf.rotation.set(baseRot.x, mixer ? 0 : Math.sin(t * 1.4) * 0.08, 0);
+      if (mixer && waveClip) {
+        if (!waveClip.isRunning()) {
+          restoreRest(elf);
+          waveClip.reset().play();
+        }
+        waveClip.timeScale = excited ? 1.25 : 1;
+        mixer.update(dt);
+      } else if (u.procedural) {
         u.armL.rotation.set(0.25, 0.1, 0.55);
         u.armL.userData.forearm.rotation.set(0.15, 0, 0);
-        u.armR.rotation.set(0.1, 0, -0.35 + Math.sin(t * 7) * 1.15);
+        u.armR.rotation.set(0.1, 0, -0.35 + wave * 1.15);
         u.armR.userData.forearm.rotation.set(0.2, 0, 0);
         u.armL.userData.hand.position.z = 0.02;
         u.armR.userData.hand.position.z = 0.02;
       } else {
-        addWorld(b.head, 0, 0, 0);
+        addWorld(b.head, 0, Math.sin(t * 2.2) * 0.06, 0);
         addWorld(b.neck, 0, 0, 0);
         addWorld(b.hips, 0, Math.sin(t * 1.4) * 0.05, 0);
-        addWorld(b.armL, 0.15, 0.1, 0.2);
-        addWorld(b.armR, 0.1, -0.15, -0.25 + Math.sin(t * 7) * 1.0);
-        addWorld(b.foreL, 0.1, 0, 0.1);
-        addWorld(b.foreR, 0.2, 0, 0.25);
+        addWorld(b.armL, 0.12, 0.08, 0.18);
+        addWorld(b.armR, 0.55, -0.55, -1.05 + wave * amp);
+        addWorld(b.foreL, 0.08, 0, 0.08);
+        addWorld(b.foreR, 0.65, 0.1, 0.35 + wave * 0.25);
         addWorld(b.handL, 0, 0, 0);
-        addWorld(b.handR, 0, 0, 0);
+        addWorld(b.handR, 0.15, 0, wave * 0.45);
       }
     }
 
     elf.updateMatrixWorld(true);
+    elf.traverse((obj) => {
+      if (obj.isSkinnedMesh && obj.skeleton) {
+        obj.skeleton.update();
+      }
+    });
 
     const center = new THREE.Vector3();
     const target = new THREE.Box3();
@@ -414,7 +476,7 @@ export async function mountElf3D(canvas) {
   function loop(now) {
     const t = now / 1000;
     canvas.style.opacity = screenOn ? "1" : "0";
-    pose(t);
+    pose(t, clock.getDelta());
     renderer.render(scene, camera);
     requestAnimationFrame(loop);
   }
@@ -444,10 +506,35 @@ export async function mountElf3D(canvas) {
     },
     resize,
     debug() {
+      const box = new THREE.Box3().setFromObject(elf);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      let skinned = 0;
+      let bones = 0;
+      const arm = elf.userData.bones && elf.userData.bones.armR;
+      const hand = elf.userData.bones && elf.userData.bones.handR;
+      const handL = elf.userData.bones && elf.userData.bones.handL;
+      elf.traverse((obj) => {
+        if (obj.isSkinnedMesh) skinned += 1;
+        if (obj.isBone) bones += 1;
+      });
       return {
         procedural: elf.userData.procedural,
         height: elf.userData.height,
         landscape: landscape(),
+        wave: Boolean(elf.userData.wave),
+        waveTime: elf.userData.wave ? elf.userData.wave.time : null,
+        canvas: [canvas.clientWidth, canvas.clientHeight],
+        camera: camera.position.toArray(),
+        fov: camera.fov,
+        near: camera.near,
+        far: camera.far,
+        box: { min: box.min.toArray(), max: box.max.toArray(), size: size.toArray(), center: center.toArray() },
+        skinned,
+        bones,
+        armR: arm ? arm.getWorldPosition(new THREE.Vector3()).toArray() : null,
+        handR: hand ? hand.getWorldPosition(new THREE.Vector3()).toArray() : null,
+        handL: handL ? handL.getWorldPosition(new THREE.Vector3()).toArray() : null,
         orient: window.watchOrientDebug ? window.watchOrientDebug() : null,
       };
     },

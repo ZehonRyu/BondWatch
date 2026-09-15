@@ -5,9 +5,11 @@
 
 enum AppScreen : uint8_t {
   APP_HOME = 0,
+  APP_MENU,
   APP_CONTROL,
   APP_SETTINGS,
   APP_TOUCH_CAL,
+  APP_LTE_TEST,
 };
 
 struct AppHooks {
@@ -26,11 +28,16 @@ struct AppHooks {
 void appBegin(const AppHooks *hooks);
 AppScreen appScreen();
 void appGoHome();
+void appOpenMenu();
 void appOpenSettings();
 void appOpenControl();
 void appOpenTouchCal();
+void appOpenLteTest();
 void appHandleGesture(const TouchGesture &g);
 void appTick(unsigned long now);
 void appNotifyPhaseIdle();
 void appRedraw();
 void appNoteActivity(unsigned long now);
+void appRunMicTx();
+void appStartTalk();
+bool appTalkBusy();

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/app.css?v=1.0.2" />
+  <link rel="stylesheet" href="/static/app.css?v=2.0.0" />
 </head>
 <body>
   <div id="update-banner" class="update-banner hidden">
@@ -21,7 +21,9 @@
     <div class="auth-card">
       <p class="eyebrow">BondWatch</p>
       <h1>手腕上的安静伴侣</h1>
-      <p class="lead">同一账号管假手表、记忆、闹钟。板子没到，先用这张脸练。</p>
+      <p class="lead">手表亮 PAIR 四位码。手机和这台电脑输入同一码，就能看到表盘说话。</p>
+      <label>手表配对码 PAIR<input id="pair-join" placeholder="例如 4242" inputmode="numeric" /></label>
+      <button class="primary" id="pair-go">用配对码绑定</button>
       <div class="tabs">
         <button class="tab on" data-mode="login">登录</button>
         <button class="tab" data-mode="register">注册</button>
@@ -49,7 +51,7 @@
     </header>
 
     <nav class="nav">
-      <button class="nav-btn on" data-page="watch">假手表</button>
+      <button class="nav-btn on" data-page="watch">手表同步</button>
       <button class="nav-btn" data-page="chat">对话</button>
       <button class="nav-btn" data-page="memory">记忆</button>
       <button class="nav-btn" data-page="alarms">闹钟</button>
@@ -60,23 +62,34 @@
       <div class="watch-layout">
         <div class="watch" id="watch">
           <div class="watch-bezel">
-            <div class="watch-screen" id="watch-screen">
-              <p class="watch-clock" id="clock">00:00</p>
-              <div class="elf" id="face">
-                <span class="ear left"></span>
-                <span class="ear right"></span>
-                <span class="spark"></span>
-                <div class="elf-head">
-                  <i></i><i></i>
-                  <em></em><em></em>
-                  <b id="mouth"></b>
+            <div class="watch-screen mode-idle" id="watch-screen">
+              <header class="ws-bar">
+                <p class="watch-clock" id="clock">00:00</p>
+                <div class="ws-wifi" aria-hidden="true"><span></span></div>
+              </header>
+              <div class="ws-card">
+                <div class="ws-glow" aria-hidden="true"></div>
+                <img id="lumi2d" class="lumi2d" src="/static/watch/models/lumi_wave.gif?v=4" width="160" height="176" alt="" />
+                <canvas id="elf3d"></canvas>
+                <div class="elf" id="face">
+                  <span class="ear left"></span>
+                  <span class="ear right"></span>
+                  <span class="spark"></span>
+                  <div class="elf-head">
+                    <i></i><i></i>
+                    <em></em><em></em>
+                    <b id="mouth"></b>
+                  </div>
                 </div>
+                <p class="subtitle" id="subtitle">点我一下就开始说话</p>
               </div>
-              <p class="emotion" id="emotion-label">待机</p>
-              <p class="subtitle" id="subtitle">点我一下就开始说话</p>
+              <div class="ws-dots" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i><i></i></div>
+              <div class="ws-pill" id="ws-pill"><span id="emotion-label">开始对话</span></div>
+              <p class="rec-line hidden" id="rec-line"><span class="rec-dot"></span> REC</p>
+              <div class="vu hidden" id="vu"><i id="vu-fill"></i></div>
             </div>
           </div>
-          <p class="watch-hint">1.69 寸 240×280 电容触摸 · 点脸说话 · 下面两颗键还在</p>
+          <p class="watch-hint">真表画面会同步到这里。点脸或对讲，手表也会跟着说。</p>
           <div class="keys">
             <button class="key pwr" id="pwr">PWR</button>
             <button class="key cam" id="cam">看</button>
@@ -85,13 +98,21 @@
           <input id="cam-file" type="file" accept="image/*" capture="environment" class="hidden" />
         </div>
         <div class="side-card">
-          <h3>配对这只表</h3>
-          <p>点脸说话。金色「看」是用手机镜头顶上表上的眼睛：电脑 OpenCV 或别的看图 API 先认图，再交给 DeepSeek。真表以后自己拍照，走同一条接口。</p>
+          <h3>绑定这只表</h3>
+          <p>手表主页青色 PAIR 码。手机 Android 和这台电脑输入同一个码。手表说话时，两边字幕一起变。</p>
           <div class="code" id="pair-code">----</div>
           <p class="muted" id="bind-state">尚未绑定设备</p>
+          <div class="audio-card" id="audio-card">
+            <h3>手表麦克风</h3>
+            <p class="muted">表上点「开始对话」，对着表说 <strong>10 秒</strong>。录完手机和这台电脑都会出现播放条。</p>
+            <audio id="watch-audio" controls></audio>
+            <p class="muted" id="audio-state">还没有录音 · 先绑定 PAIR，再看手表录</p>
+          </div>
+          <button class="primary" id="talk-start" style="width:100%;margin:12px 0 8px">开始语音对话</button>
+          <p class="muted" style="margin:0 0 8px">Chrome/Edge 麦克风 → 思考 → DeepSeek/OpenRouter 回复 → 朗读</p>
           <div class="row">
             <input id="talk-text" placeholder="用文字代替麦克风，例如：记住我喜欢短句" />
-            <button class="primary" id="talk-go">对讲</button>
+            <button class="primary" id="talk-go">发送</button>
           </div>
         </div>
       </div>
@@ -132,6 +153,10 @@
       </div>
     </section>
   </main>
-  <script src="/static/app.js?v=1.0.2"></script>
+  <script type="importmap">
+    { "imports": { "three": "/static/watch/vendor/three.module.js" } }
+  </script>
+  <script type="module" src="/static/watch/elf3d.js?v=28"></script>
+  <script src="/static/app.js?v=2.0.0"></script>
 </body>
 </html>
